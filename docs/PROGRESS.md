@@ -1,7 +1,7 @@
 # Tiến độ dự án
 
 ## Trạng thái hiện tại
-- Phase đang làm: **P0 — Khởi tạo repo và tài liệu** (xong, chờ commit đầu)
+- Phase đang làm: **P0 — Khởi tạo repo và tài liệu** (đã commit `ad7036e` trên nhánh `phase-00-repo-docs`)
 - Lệnh chạy dự án: `npm run dev:fe` (frontend, `http://localhost:5173`) · `npm run dev:be` (backend, chưa có mã nguồn)
 - Cập nhật lần cuối: 2026-10-04, phiên 1 (P0)
 
@@ -67,8 +67,11 @@
 - `npm run check` hiện in bước "chưa cấu hình" cho backend (không có `backend/package.json`) và cho `test` của frontend.
   Đây là **cảnh báo**, không phải kết quả xanh — xem `docs/PROGRESS.md` mục "Vấn đề đã biết" và `scripts/check.mjs`.
 - Frontend dùng `oxlint`; chưa có test runner ở cả hai phía (sẽ thêm ở P2/P3 cho backend).
-- Repo đã có sẵn 1 commit cũ (`add: initial interface`) chỉ chứa file trong `.kilo/worktrees/…`; các file đó đã bị
-  gỡ khỏi git qua `.gitignore` (không xoá trên đĩa).
+- Repo trước đó chỉ có commit `006fe9b add: initial interface` chứa 40 file trong `.kilo/worktrees/raspy-xenon/` và một
+  **gitlink hỏng** cho `frontend` (không có `.gitmodules`, không có `frontend/.git`, commit `19bf548` không tồn tại trong repo).
+  P0 đã gỡ `.kilo` khỏi tracking và đưa mã nguồn `frontend/` vào tracking như file thường.
+- Remote `origin` đang trỏ tới `https://github.com/Toan564-toa/trung-tam-tieng-anh.git` (khác tên thư mục
+  `trung-tam-ngoai-ngu`) — **cần xác nhận trước khi push**, chưa push gì ở P0.
 - Đặc tả gốc chưa có trong `docs/spec/`; mọi nội dung suy ra đều gắn nhãn `[CẦN XÁC NHẬN]`.
 
 ## Việc phát sinh (ngoài phạm vi, chờ quyết định)
