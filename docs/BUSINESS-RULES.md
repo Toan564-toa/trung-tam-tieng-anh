@@ -1,7 +1,8 @@
 # Quy tắc nghiệp vụ
 
-Nguồn: `AGENTS.md` mục 8 + dữ liệu giả trong `frontend/src/data/`.
-**Chưa đối chiếu `docs/spec/quan-ly-trung-tam-ngoai-ngu.md` (đặc tả đang thiếu)** → mục suy đoán gắn `[CẦN XÁC NHẬN]` (D-007).
+Nguồn: `AGENTS.md` mục 8 + dữ liệu giả trong `frontend/src/data/` + `docs/spec/quan-ly-trung-tam-ngoai-ngu.md`
+và `docs/spec/thiet-ke-database-day-du.md` (đặc tả **đã có** từ P1, xem D-008).
+Các mục còn suy đoán vẫn gắn `[CẦN XÁC NHẬN]` và được liệt kê tập trung ở `docs/FRONTEND-CONTRACT.md` phần G.
 
 Nguyên tắc chung:
 1. Tiền luôn là **số nguyên VND**, không dùng số thực.

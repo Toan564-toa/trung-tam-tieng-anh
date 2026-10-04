@@ -1,25 +1,33 @@
 # API — hợp đồng endpoint
 
-> Khung tài liệu (P0). Mỗi endpoint thêm vào **trong cùng commit** với code (AGENTS.md mục 6).
+> Khung tài liệu (P0), cập nhật P1. Mỗi endpoint thêm vào **trong cùng commit** với code (AGENTS.md mục 6).
 > Mỗi module backend có file ví dụ gọi thử `backend/requests/<module>.http` (REST Client của VS Code).
+>
+> **P1:** danh sách endpoint theo từng màn hình (hơn 120 endpoint) nằm ở
+> `docs/FRONTEND-CONTRACT.md` phần C — đó là nguồn chính xác. Mục 1 bên dưới chỉ là khung rút gọn.
+> Quy ước đặt tên: xem **D-013** (tài nguyên theo đường dẫn, dữ liệu của mình dùng `/api/me`).
 
 ## 0. Quy ước chung
 
 | Mục | Quy ước |
 | --- | --- |
-| Tiền tố | `/api` |
-| Tên tài nguyên | Số nhiều, kebab-case: `/api/students`, `/api/class-sessions`, `/api/pay-rolls` |
+| Tiền tố | `/api`; site công khai dùng thêm `/api/public` |
+| Tên tài nguyên | Số nhiều, kebab-case: `/api/students`, `/api/class-schedules`, `/api/payroll` |
+| Không nhúng vai trò | Không có `/admin`, `/teacher`, `/staff` trong path — kiểm bằng `requireRole` (D-013) |
+| Dữ liệu của mình | Tiền tố `/api/me`: `/api/me/tuition`, `/api/me/scores`, `/api/me/payroll` |
+| Danh sách theo phạm vi | Dùng bộ lọc truy vấn: `/api/students?classId=…`, `/api/leads?stage=new` |
 | Thành công (một đối tượng) | `{ "data": { ... } }` |
 | Thành công (danh sách) | `{ "data": { "items": [], "page": 1, "pageSize": 20, "total": 0, "totalPages": 0 } }` |
 | Lỗi | `{ "error": { "code": "...", "message": "...", "details": [] } }` |
 | Mã lỗi HTTP | 400 `VALIDATION_ERROR`, 401 `UNAUTHENTICATED`, 403 `FORBIDDEN`, 404 `NOT_FOUND`, 409 `CONFLICT` / `OVERPAYMENT`, 423 `LOCKED`, 429 `RATE_LIMITED`, 500 `INTERNAL_ERROR` |
-| Phân trang | `?page=1&pageSize=20` (mặc định 20, tối đa 100), luôn sắp xếp ổn định |
+| Phân trang | `?page=1&pageSize=20` (mặc định 20, tối đa 100), luôn sắp xếp ổn định (frontend đang dùng 10/trang) |
 | Sắp xếp | `?sort=createdAt:desc` |
-| Lọc/tìm kiếm | `?query=` + tham số riêng, đúng như `docs/FRONTEND-CONTRACT.md` mục C ghi cho màn hình đó |
+| Lọc/tìm kiếm | `?query=` + tham số riêng, đúng như `docs/FRONTEND-CONTRACT.md` phần C ghi cho màn hình đó |
 | Xác thực | Cookie JWT `httpOnly`, `credentials: "include"` |
 | Tiền | Số nguyên VND |
-| Thời gian | ISO 8601 UTC (`2026-10-02T03:00:00Z`); frontend hiển thị Asia/Ho_Chi_Minh |
-| Đặt tên trường JSON | camelCase, bám `docs/FRONTEND-CONTRACT.md` |
+| Thời gian | ISO 8601 UTC (`2026-10-02T03:00:00Z`); frontend hiển thị Asia/Ho_Chi_Minh (D-011) |
+| Đặt tên trường JSON | camelCase, **giữ nguyên** tên biến trong `frontend/src/data` (D-009) |
+| Trạng thái | Trả **mã tiếng Anh** (`cash`, `published`, `present`); nhãn tiếng Việt ở frontend (D-010) |
 
 ## 1. Danh sách endpoint (điền theo từng module)
 
@@ -56,6 +64,38 @@
 | 29 | `GET /api/audit-logs` | admin | Nhật ký thao tác | audit | chưa có |
 | 30 | `GET/PATCH /api/settings` | admin | Cài đặt | settings | chưa có |
 
+## 1b. Nhóm bổ sung sinh ra ở P1 (xem FRONTEND-CONTRACT.md phần C để có đầy đủ tham số)
+
+| # | Method + Path | Quyền | Màn hình dùng | Module |
+| --- | --- | --- | --- | --- |
+| 31 | `POST /api/auth/request-unlock`, `POST /api/auth/forgot-password` | công khai | Đăng nhập (quên mật khẩu) | auth |
+| 32 | `PATCH /api/users/:id/status`, `POST /api/users/:id/reset-password`, `PATCH /api/users/:id/restore` | admin | Tài khoản & phân quyền | users |
+| 33 | `GET /api/users/export` | admin | Xuất Excel tài khoản | users |
+| 34 | `POST /api/imports/preview`, `POST /api/imports/:id/commit`, `POST /api/imports/:id/credentials`, `GET /api/imports/template` | admin | Nhập Excel | imports |
+| 35 | `GET /api/me`, `PATCH /api/me` | mọi vai trò | Thông tin cá nhân (3 khu vực) | profile |
+| 36 | `GET /api/me/summary`, `/api/me/progress`, `/api/me/lessons`, `/api/me/attendance`, `/api/me/attendance-summary`, `/api/me/scores`, `/api/me/scores/summary`, `/api/me/assignments`, `/api/me/tuition`, `/api/me/payments`, `/api/me/calendar`, `/api/me/announcements` | học viên | 7 màn khu học viên | student-self |
+| 37 | `GET /api/me/classes`, `/api/me/students`, `/api/me/schedule`, `/api/me/assessments`, `/api/me/payroll`, `/api/me/overview` | giáo viên | 11 màn khu giáo viên | teacher-self |
+| 38 | `GET /api/me/students?tuition=`, `/api/me/leads`, `/api/me/leads/conversion`, `/api/me/payments/summary`, `/api/me/timetable`, `/api/me/events`, `/api/me/posts`, `/api/me/payroll`, `/api/me/tasks` | nhân viên | 10 màn khu nhân viên | staff-self |
+| 39 | `GET /api/students/:id/notes`, `POST /api/students/:id/notes` | staff, admin | Ghi chú chăm sóc | students |
+| 40 | `POST /api/students`, `PATCH /api/students/:id` | staff, admin | Ghi danh, hồ sơ học viên | students |
+| 41 | `POST /api/enrollments`, `GET /api/classes/:id/students` | staff, admin | Ghi danh vào lớp | enrollments |
+| 42 | `GET /api/classes/today` | staff, admin | Lịch trình, dashboard | classes |
+| 43 | `GET/PUT /api/classes/:classId/sessions/:sessionId/attendance`, `PATCH /api/classes/:classId/sessions/:sessionId` | teacher, admin | Điểm danh | sessions |
+| 44 | `POST /api/classes/:classId/attendance/unlock` | **admin** | Mở khoá điểm danh | sessions |
+| 45 | `GET /api/attendance/today` | staff, admin | Điểm danh hôm nay | sessions |
+| 46 | `POST /api/classes/:classId/schedules`, `PATCH/DELETE /api/class-schedules/:id`, `POST /api/timetable/check` | admin | Thời khóa biểu | timetable |
+| 47 | `POST /api/assessments`, `GET/PUT /api/assessments/:id/scores` | teacher, admin | Nhập điểm | grades |
+| 48 | `GET /api/me/payroll/:id/pdf`, `GET /api/payroll/:id/pdf` | giáo viên, nhân viên, admin | Phiếu lương | payroll |
+| 49 | `POST /api/payroll/periods`, `POST /api/payroll/items`, `POST /api/payroll/periods/:id/approve`, `POST /api/payroll/periods/:id/lock` | admin | Bảng lương admin | payroll |
+| 50 | `GET /api/payments/:id/receipt` | student(đúng người), staff, admin | Phiếu thu | tuition |
+| 51 | `POST /api/cash-closings`, `POST /api/cash-closings/:id/close` | staff, admin | Đối soát tiền mặt | tuition |
+| 52 | `POST /api/discounts/:id/approve`, `POST /api/refunds/:id/approve` | admin | Duyệt giảm giá / hoàn phí | tuition |
+| 53 | `POST /api/posts/:id/publish`, `POST /api/posts/:id/approve`, `POST /api/posts/:id/unpublish` | staff, admin | Bài đăng | content |
+| 54 | `PATCH /api/teachers/:id/website-visibility`, `GET/POST/PATCH /api/banners` | admin | Nội dung website | content |
+| 55 | `POST /api/leads/:id/activities`, `PATCH /api/leads/:id/stage`, `POST /api/leads/:id/convert` | staff, admin | Khách tiềm năng | leads |
+| 56 | `GET /api/reports/{revenue,enrollment,class-size,lead-source,funnel,debt-total,debt-aging,attendance}`, `GET /api/reports/export` | admin | Báo cáo | reports |
+| 57 | `GET /api/notifications` | mọi vai trò | Chuông thông báo | notifications |
+
 ## 2. Mẫu mô tả endpoint
 
 ```md
@@ -80,3 +120,4 @@
 | Ngày | Endpoint | Thay đổi | Phase |
 | --- | --- | --- | --- |
 | 2026-10-04 | — | Tạo khung tài liệu | P0 |
+| 2026-10-04 | toàn bộ | Bổ sung nhóm 31–57 theo kiểm kê màn hình; chốt quy ước `/api/me` và mã trạng thái (D-009, D-010, D-013) | P1 |
