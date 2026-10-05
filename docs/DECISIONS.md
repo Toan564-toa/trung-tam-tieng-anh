@@ -268,13 +268,22 @@ nếu quyết định cũ sai thì thêm quyết định mới ghi "thay thế D
 - Hệ quả: mọi module có tìm kiếm tên ở P3 trở đi phải dùng `ttnn_unaccent` theo mẫu này.
   Tiền tố `CREATE EXTENSION` cần quyền trên production — kiểm tra khi lên triển khai (P21).
 
-## D-021: `students.email` không phải cột duy nhất [CẦN XÁC NHẬN]
-- Ngày / Phase: 2026-10-05, P2
+## D-021: `students.email` KHÔNG phải cột duy nhất, `student_code` mới là duy nhất [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-05, P2 (người dùng xác nhận)
 - Bối cảnh: test ban đầu giả định email trùng phải trả 409, nhưng thực tế tạo được (201). Kiểm tra lại:
   `schema.prisma` chỉ đánh dấu `@unique` cho `studentCode` và `userId`, và đặc tả thiết kế
   (`thiet-ke-database-day-du.md:78`) cũng chỉ ghi `student_code (duy nhất)`.
-- Đã chọn (tạm): giữ nguyên schema, **không** thêm ràng buộc duy nhất cho email; sửa test cho đúng hành vi thật.
-- Lý do: thêm `@unique` là thay đổi nghiệp vụ, ảnh hưởng dữ liệu import Excel ở P6 — cần người dùng xác nhận.
-- Phương án đã loại và lý do: ép 409 trong service khi schema không có ràng buộc (dễ lọt lỗi khi nhập hàng loạt).
-- Hệ quả: **cần người dùng trả lời ở P3**: một học viên có được chia sẻ email với người khác không?
-  Nếu không thì thêm `@unique` và viết migration. Đã ghi vào `docs/PROGRESS.md`.
+- Đã chốt: **giữ nguyên schema** — thêm ràng buộc duy nhất cho `email` sẽ là sai nghiệp vụ.
+- Lý do (người dùng nêu):
+  - Phụ huynh có thể dùng chung một email để nhận thông báo cho con, hoặc một học viên dùng email của
+    người nhà/trường. Ép duy nhất sẽ chặn những ca hợp lệ.
+  - Ý tưởng ban đầu: **trung tâm cấp email** cho học viên (`hv...@trungtam.edu.vn`), nên email là dữ liệu
+    do trung tâm quản lý, không phải định danh người dùng.
+  - Vì vậy **định danh tin cậy là `student_code`**, không phải email.
+- Hệ quả cần ghi nhớ:
+  - Tìm kiếm học viên **không được dựa vào email** làm khoá duy nhất; dùng `student_code` hoặc tên + mã.
+  - Module import Excel ở P6 phải cho phép trùng email và báo lỗi khi trùng `student_code`.
+  - Nếu sau này cấp email tự động thì email đó **không** dùng làm khoá và không đảm bảo duy nhất.
+  - `errorHandler` đã sẵn sàng dịch lỗi `P2002` thành 409 nên khi nào siết `student_code` cũng không cần sửa thêm.
+- Test đã sửa cho khớp: `tests/students.test.ts` kiểm tra email trùng vẫn tạo được (201) và mã học viên
+  sinh ra khác.

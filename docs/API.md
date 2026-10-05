@@ -138,7 +138,9 @@
 - Body tạo mới: `{ "fullName", "dob"?, "gender"?, "phone"?, "email"?, "address"?, "note"? }` — mã học viên **sinh tự động**.
 - Thành công: 200 `{ "data": { "items", "page", "pageSize", "total", "totalPages" } }` / 201 `{ "data": {...} }`
 - Lỗi: 400 `VALIDATION_ERROR` (kèm `details`), 403 `FORBIDDEN`.
-- Quy tắc: mỗi lần tạo/sửa đều ghi `audit_logs`; số điện thoại phải khớp `0\d{9}`; **chỉ `student_code` là duy nhất**, email trùng vẫn tạo được.
+- Quy tắc: mỗi lần tạo/sửa đều ghi `audit_logs`; số điện thoại phải khớp `0\d{9}`;
+  **định danh tin cậy là `student_code`** — `email` cố ý **không** duy nhất vì phụ huynh có thể
+  dùng chung email, nên email trùng vẫn tạo được (D-021).
 - File: `backend/requests/students.http`
 
 ### GET/PATCH/DELETE /api/students/:id

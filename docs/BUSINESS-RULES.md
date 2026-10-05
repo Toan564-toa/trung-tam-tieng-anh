@@ -71,11 +71,18 @@ Nguyên tắc chung:
 - Khoá tài khoản: đăng nhập trả 423 LOCKED `[CẦN XÁC NHẬN: có dùng 403 thay vì 423 không?]`.
 - Import Excel: báo cáo kết quả theo từng dòng (thành công / lỗi), giới hạn dung lượng và định dạng file.
 
-## BR-11. Nhật ký và bảo mật
+## BR-11. Định danh học viên
+- **Định danh tin cậy của học viên là `student_code`**, không phải email (D-021).
+- `students.email` **cố ý không** có ràng buộc duy nhất: phụ huynh có thể dùng chung email để nhận
+  thông báo, và trung tâm có thể cấp email nội bộ cho học viên.
+- Hệ quả: tìm kiếm học viên dựa trên `student_code` hoặc tên; **không** dùng email làm khoá nhận diện.
+- Import Excel: cho phép trùng email, báo lỗi khi trùng `student_code`.
+
+## BR-12. Nhật ký và bảo mật
 - `audit_logs` ghi cho: tạo/sửa/xoá hồ sơ, thu tiền, điểm, điểm danh, lương, tài khoản, mở khoá điểm danh.
 - Log ứng dụng **không** chứa mật khẩu, token, cookie hay dữ liệu cá nhân nhạy cảm.
 - Điều hướng và truy cập hệ thống nội bộ còn giữ mật định; chỉ mở khi có yêu cầu rõ ràng `[CẦN XÁC NHẬN]`.
 
-## BR-12. Cấu hình trung tâm
+## BR-13. Cấu hình trung tâm
 - Thông tin trung tâm, mẫu biên lai, mẫu hợp đồng, năm học và khoá học đang chạy do admin quản lý.
 - `năm_hoc_hien_tai` dùng làm mặc định cho màn hình cần chọn khoá; không tự đổi giữa phiên.

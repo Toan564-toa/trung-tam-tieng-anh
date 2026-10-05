@@ -95,9 +95,7 @@ Thứ tự này xuất ra từ ma trận quyền (`docs/PERMISSIONS.md`) và h�
     báo 320 lỗi trên file build. Đã tách object `ignores` riêng.
   - **`createClass()`** trong fixtures gọi `findFirstOrThrow()` course nhưng test không tạo course; đã tự tạo.
   - Bật `isTest` để logger không in từng request khi chạy test.
-- Còn nợ (không chặn P3):
-  - Chưa commit P2.
-  - Cần người dùng xác nhận `students.email` có phải cột duy nhất không (D-021).
+- Câu hỏi P2 đã chốt: `students.email` **không** duy nhất, định danh tin cậy là `student_code` (D-021).
 - Lệnh để chạy lại:
   ```
   cd backend
@@ -195,10 +193,9 @@ Chi tiết đầy đủ ở `docs/FRONTEND-CONTRACT.md` phần D, E, F. Các l�
 - Prisma 6 cảnh báo `package.json#prisma` sẽ bị bỏ ở Prisma 7, nên chuyển sang `prisma.config.ts`. Chưa làm vì
   ngoài phạm vi P2.
 
-## Câu hỏi cần người dùng trả lời (P2 — đã chốt hết trừ D-021)
-- **D-021: `students.email` có phải cột duy nhất không?** Một học viên có được dùng chung email với
-  người khác (ví dụ email của phụ huynh) không? Nếu **không** thì thêm `@unique` và viết migration ở P3.
-  Nếu **có** thì giữ nguyên, chỉ cần chỉnh lại test. Đặc tả thiết kế hiện chỉ ghi `student_code` là duy nhất.
+## Câu hỏi cần người dùng trả lời
+- P2: **không còn câu hỏi nào** — `students.email` đã chốt là **không duy nhất**, định danh tin cậy là
+  `student_code` (D-021).
   Frontend typecheck/lint/build đã chạy riêng và qua; frontend test chưa được cấu hình.
 - Frontend dùng `oxlint`; lint có cảnh báo `only-export-components` ở một số file nhưng **không có lỗi**.
 - `npm test` của frontend **chưa cấu hình** — `scripts/check.mjs` in "CHƯA CẤU HÌNH" cho bước này.
