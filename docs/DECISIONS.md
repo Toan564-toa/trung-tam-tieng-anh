@@ -251,3 +251,30 @@ nếu quyết định cũ sai thì thêm quyết định mới ghi "thay thế D
   ~90 cột là thay đổi lớn, phải làm trước khi có dữ liệu thật và cần chạy lại toàn bộ truy vấn.
 - Phương án đã loại và lý do: đổi ngay ở P2 (vượt phạm vi, rủi ro cao khi migration chưa từng chạy thật).
 - Hệ quả: **phải quyết định ở P3 trước khi seed dữ liệu thật.** Đã ghi vào `docs/PROGRESS.md`.
+
+## D-020: Tìm kiếm tiếng Việt không phân biệt dấu [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-05, P2
+- Bối cảnh: test `search=nguyen` không ra `Nguyễn Văn A`. Nguyên nhân: `mode: 'insensitive'` của Prisma
+  chỉ bỏ HOA THƯỜNG, **không** bỏ dấu tiếng Việt. Hướng dẫn gốc mục 8 lại dùng đúng ví dụ này
+  (`?search=Nguyen`), và mọi màn hình danh sách đều có ô tìm kiếm tên.
+- Đã chọn: bật extension `unaccent` của PostgreSQL qua migration `20261005070000_add_unaccent`, bọc lại
+  thành hàm `ttnn_unaccent(text)` đánh dấu `IMMUTABLE` (extension gốc không có nhãn này nên không index
+  được), kèm index trên `ttnn_unaccent("fullName")`.
+- Vì sao không dùng cách khác:
+  - Chuẩn hoá trong ứng dụng: phải bỏ dấu mọi bản ghi khi ghi, cần cột phụ, và tốn công khi sửa dữ liệu cũ.
+  - Chuẩn hoá bằng `pg_tgm` (`similarity`): trả về điểm số, dễ trả kết quả lạ; người dùng cần tìm chính xác.
+- Lỗi đã phát hiện khi kiểm chứng: bản đầu chỉ bỏ dấu **cột** mà quên bỏ dấu **từ khoá**, nên gõ
+  `nguyễn` (có dấu) lại không ra kết quả. Đã sửa thành bỏ dấu cả hai vế.
+- Hệ quả: mọi module có tìm kiếm tên ở P3 trở đi phải dùng `ttnn_unaccent` theo mẫu này.
+  Tiền tố `CREATE EXTENSION` cần quyền trên production — kiểm tra khi lên triển khai (P21).
+
+## D-021: `students.email` không phải cột duy nhất [CẦN XÁC NHẬN]
+- Ngày / Phase: 2026-10-05, P2
+- Bối cảnh: test ban đầu giả định email trùng phải trả 409, nhưng thực tế tạo được (201). Kiểm tra lại:
+  `schema.prisma` chỉ đánh dấu `@unique` cho `studentCode` và `userId`, và đặc tả thiết kế
+  (`thiet-ke-database-day-du.md:78`) cũng chỉ ghi `student_code (duy nhất)`.
+- Đã chọn (tạm): giữ nguyên schema, **không** thêm ràng buộc duy nhất cho email; sửa test cho đúng hành vi thật.
+- Lý do: thêm `@unique` là thay đổi nghiệp vụ, ảnh hưởng dữ liệu import Excel ở P6 — cần người dùng xác nhận.
+- Phương án đã loại và lý do: ép 409 trong service khi schema không có ràng buộc (dễ lọt lỗi khi nhập hàng loạt).
+- Hệ quả: **cần người dùng trả lời ở P3**: một học viên có được chia sẻ email với người khác không?
+  Nếu không thì thêm `@unique` và viết migration. Đã ghi vào `docs/PROGRESS.md`.

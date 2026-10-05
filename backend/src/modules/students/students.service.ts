@@ -1,5 +1,4 @@
-import type { Prisma } from '@prisma/client';
-import { prisma } from '../../config/prisma';
+import { Prisma, prisma } from '../../config/prisma';
 import { writeAudit } from '../../utils/audit';
 import { HttpError } from '../../utils/httpError';
 import type { CreateStudentInput, ListStudentsQuery, UpdateStudentInput } from './students.schema';
@@ -17,19 +16,33 @@ const listSelect = {
   createdAt: true,
 } satisfies Prisma.StudentSelect;
 
+// Số học viên khớp từ khoá tìm kiếm. Truy vấn tham số hoá, giới hạn số lượng để truy vấn rẻ.
+async function searchStudentIds(term: string): Promise<number[]> {
+  const rows = await prisma.$queryRaw<Array<{ id: number }>>`
+    SELECT id
+    FROM students
+    WHERE "deletedAt" IS NULL
+      AND (
+        -- Bỏ dấu cả cột lẫn từ khoá để tìm được dù gõ "nguyen" hay "nguyễn".
+        ttnn_unaccent("fullName") ILIKE '%' || ttnn_unaccent(${term}) || '%'
+        OR ttnn_unaccent("studentCode") ILIKE '%' || ttnn_unaccent(${term}) || '%'
+        OR ttnn_unaccent(COALESCE(phone, '')) ILIKE '%' || ttnn_unaccent(${term}) || '%'
+      )
+    ORDER BY id DESC
+    LIMIT 5000
+  `;
+  return rows.map((r) => r.id);
+}
+
 export async function listStudents(q: ListStudentsQuery) {
+  // Tìm kiếm tiếng Việt không dấu cần bọc cột bằng hàm ttnn_unaccent() của database,
+  // Prisma không biểu đạt được nên lấy trước danh sách id rồi lọc tiếp bằng `in`.
+  const searchIds = q.search ? await searchStudentIds(q.search) : null;
+
   const where: Prisma.StudentWhereInput = {
     deletedAt: null, // xóa mềm: luôn loại bản ghi đã xóa
     ...(q.status ? { status: q.status } : {}),
-    ...(q.search
-      ? {
-          OR: [
-            { fullName: { contains: q.search, mode: 'insensitive' } },
-            { studentCode: { contains: q.search, mode: 'insensitive' } },
-            { phone: { contains: q.search } },
-          ],
-        }
-      : {}),
+    ...(searchIds ? { id: { in: searchIds } } : {}),
   };
 
   const [items, total] = await prisma.$transaction([

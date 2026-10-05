@@ -1,4 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 
 // Chỉ tạo MỘT PrismaClient cho cả ứng dụng.
 export const prisma = new PrismaClient();
+
+export { Prisma };

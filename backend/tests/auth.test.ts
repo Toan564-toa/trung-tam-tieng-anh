@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { app, cookiesOf, createUser, loginAs, PASSWORD, seedRoles } from './helpers/fixtures';
+import { app, cookiesOf, createTeacherUser, createUser, loginAs, PASSWORD, seedRoles } from './helpers/fixtures';
 import { closeDatabase, resetDatabase } from './helpers/db';
 import { prisma } from '../src/config/prisma';
 import { env } from '../src/config/env';
@@ -108,7 +108,8 @@ describe('GET /api/auth/me', () => {
   });
 
   it('trả thông tin tài khoản khi có cookie hợp lệ', async () => {
-    await createUser('teacher', 'gv01');
+    // createTeacherUser tạo cả hồ sơ giáo viên, /me phải trả kèm hồ sơ theo vai trò.
+    await createTeacherUser('GV0001', 'Giáo viên A', 'gv01');
     const cookie = await loginAs('gv01');
 
     const res = await request(app()).get('/api/auth/me').set('Cookie', cookie);

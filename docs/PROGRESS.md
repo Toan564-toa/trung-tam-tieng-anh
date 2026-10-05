@@ -1,17 +1,17 @@
 # Tiến độ dự án
 
 ## Trạng thái hiện tại
-- Phase đang làm: **P2 — Kiểm chứng khung backend** (đang làm; chờ PostgreSQL để chạy migrate/seed/server/test)
+- Phase đang làm: **P2 — Kiểm chứng khung backend** (xong: typecheck, lint, test, build, server thật đều xanh)
 - Phase tiếp theo: **P3 — Schema đầy đủ và dữ liệu mẫu**
 - Lệnh chạy dự án: `npm run dev:fe` (frontend) · `npm run dev:be` (backend, `http://localhost:4000`)
-- Cập nhật lần cuối: 2026-10-05, phiên 3 (P2)
-- Chi tiết P2: `backend/README.md`, `docs/DECISIONS.md` D-014…D-019
+- Cập nhật lần cuối: 2026-10-05, phiên 3 (P2 xong)
+- Chi tiết P2: `backend/README.md`, `docs/DECISIONS.md` D-014…D-021
 
 ## Danh sách phase
 ### Chuẩn bị
 - [x] P0 Khởi tạo repo và tài liệu
 - [x] P1 Kiểm kê frontend, lập hợp đồng dữ liệu
-- [ ] P2 Kiểm chứng khung backend
+- [ ] P2 Kiểm chứng khung backend — **đã xong 2026-10-05** (xem nhật ký phiên 3)
 - [ ] P3 Schema đầy đủ và dữ liệu mẫu
 ### Mốc 1: Đăng nhập, tài khoản, hồ sơ, import
 - [ ] P4 Đăng nhập và quản lý tài khoản (BE)
@@ -54,7 +54,7 @@ Thứ tự này xuất ra từ ma trận quyền (`docs/PERMISSIONS.md`) và h�
 | 10 | `notifications, audit_logs, settings, sequences, files` + view báo cáo (P18) | Dashboard, báo cáo, cài đặt; `audit_logs` bắt buộc từ Mốc 1 |
 
 ## Nhật ký bàn giao (mới nhất ở trên)
-### Phiên 3: 2026-10-05 (P2 — kiểm chứng khung backend; **đang dở**, chờ PostgreSQL)
+### Phiên 3: 2026-10-05 (P2 — kiểm chứng khung backend; **xong**)
 - Đã làm:
   - Mã nguồn khung backend đã có trong `backend/` (`src/`, `prisma/`, `package.json`, `tsconfig.json`,
     `docker-compose.yml`). Hướng dẫn gốc dời từ `backend/docs/spec/` lên `backend/HUONG-DAN-BACKEND.md`.
@@ -71,18 +71,37 @@ Thứ tự này xuất ra từ ma trận quyền (`docs/PERMISSIONS.md`) và h�
   - Nới rate limit khi `NODE_ENV=test` để không che mất lỗi 423 (D-018).
   - 4 file `backend/requests/*.http` để gọi thử bằng tay (auth, students, leads, attendance).
   - `backend/README.md` viết lại theo thực tế đã kiểm chứng.
-  - `docs/DECISIONS.md` thêm D-014…D-019.
-- Chưa làm (cần PostgreSQL — **người dùng đang cài Docker Desktop**):
-  - `docker compose up -d` → `npx prisma migrate dev --name init` → `npm run db:seed`
-  - Đã chạy `npm run check`: backend typecheck/lint xanh, nhưng test dừng ở global setup vì PostgreSQL
-    `localhost:5432` chưa chạy; do đó các test và fixture đã biết trong `tests/attendance.test.ts` chưa được xác minh.
-    Backend build riêng xanh. Frontend typecheck/lint/build xanh; test frontend hiện chỉ là placeholder.
-  - Chạy `npm run dev` và gọi thử API thật.
-- Lệnh sẽ chạy ngay khi có PostgreSQL:
+  - `docs/DECISIONS.md` thêm D-014…D-021.
+- Đã chạy thật và xanh:
+  - `npx prisma migrate dev --name init` → migration `20261005064713_init` trên PostgreSQL cloud.
+  - `npm run db:seed` → 5 vai trò + tài khoản admin + 1 khóa học mẫu.
+  - `npm test` → **5 file, 77 test, tất cả xanh** (chạy trong `npm run check` ở gốc, ~18 phút).
+  - `npm run typecheck`, `npm run lint`, `npm run build`, `npx prettier --check .` → xanh.
+  - Server chạy thật (`npm run dev`), smoke test bằng tay: `/health`, login sai 401, login đúng 200 + 2 cookie,
+    `/me` có/không cookie, form tư vấn 201, tạo học viên 201, danh sách phân trang, tìm không dấu,
+    đổi mật khẩu 400 rồi 200 và login lại được, danh sách + sửa lead, xoá mềm 204 rồi đọc lại 404,
+    điểm danh buổi không tồn tại 404, logout.
+- Lỗi thật đã phát hiện và sửa trong lúc kiểm chứng:
+  - **Tìm kiếm không bỏ dấu tiếng Việt** — `mode: 'insensitive'` chỉ bỏ HOA THƯỜNG. Thêm extension `unaccent`
+    qua migration `20261005070000_add_unaccent` + hàm `ttnn_unaccent` đánh dấu `IMMUTABLE` để index được.
+    Bỏ dấu cả cột lẫn từ khoá nên gõ `nguyen` và `nguyễn` cho cùng kết quả (D-020).
+  - **`tests/helpers/fixtures.ts`** đọc cookie bằng `getSetCookie()` — supertest trả `res.headers` là object
+    thường nên luôn rỗng, làm đỏ 8 test. Đã đọc `res.headers['set-cookie']`.
+  - **`tests/global-setup.ts`** giả định có database `postgres` để tạo/xoá database test; dịch vụ cloud
+    không có. Đã thử lần lượt `postgres`, database phát triển, `template1`.
+  - **`tests/global-setup.ts`** gọi `npx.cmd` bị lỗi `EINVAL` trên Node 24/Windows; chuyển sang chạy
+    `process.execPath` với `prisma/build/index.js`.
+  - **`eslint.config.mjs`** đặt `ignores` chung với `linterOptions` nên ESLint không bỏ qua `dist/`,
+    báo 320 lỗi trên file build. Đã tách object `ignores` riêng.
+  - **`createClass()`** trong fixtures gọi `findFirstOrThrow()` course nhưng test không tạo course; đã tự tạo.
+  - Bật `isTest` để logger không in từng request khi chạy test.
+- Còn nợ (không chặn P3):
+  - Chưa commit P2.
+  - Cần người dùng xác nhận `students.email` có phải cột duy nhất không (D-021).
+- Lệnh để chạy lại:
   ```
   cd backend
-  docker compose up -d
-  npx prisma migrate dev --name init
+  npx prisma migrate dev      # đã có 2 migration trong git
   npm run db:seed
   npm test
   npm run dev
@@ -152,8 +171,34 @@ Chi tiết đầy đủ ở `docs/FRONTEND-CONTRACT.md` phần D, E, F. Các l�
 - `role-home-page.tsx` không được route nhưng còn chuỗi cứng trong một số màn (F10).
 
 ## Vấn đề đã biết
-- **`npm run check` ở gốc chưa xanh**: backend typecheck/lint qua, nhưng test cần PostgreSQL tại `localhost:5432`
-  để dựng database test; hiện database chưa chạy nên bước build tiếp theo không được gọi bởi script tổng.
+- **Test chạy chậm**: xem mục `npm run check` ngay trên.
+- **Tài khoản admin đã đổi mật khẩu khi kiểm chứng**: mật khẩu trong database phát triển hiện là
+  `MatKhauMoi@123`, không còn là `SEED_ADMIN_PASSWORD`. Chạy lại `npm run db:seed` cũng không đổi vì
+  seed bỏ qua khi tài khoản đã tồn tại.
+- **`npm run check` ở gốc: ĐÃ XANH** (2026-10-05) — backend typecheck/lint/test/build đều qua,
+  frontend typecheck/lint/build đều qua. Frontend **chưa** có `npm run test` nên bước này in
+  "CHƯA CẤU HÌNH" (cảnh báo, không phải xanh) — sẽ thêm test runner cho frontend ở phase NỐI.
+- **Test backend chạy chậm**: database phát triển và database test đều trỏ tới PostgreSQL cloud ở nước ngoài,
+  mỗi request mất 1–3 giây nên `npm test` mất ~18 phút. Không phải lỗi code. Muốn test nhanh khi phát triển
+  thì đổi `DATABASE_URL`/`TEST_DATABASE_URL` trong `.env` sang PostgreSQL local (`docker compose up -d`).
+- Frontend dùng `oxlint`; lint có cảnh báo `only-export-components` ở một số file nhưng **không có lỗi**.
+- **`schema.prisma` dùng tên cột camelCase** (tên bảng đã `@@map` sang snake_case) → trái với D-004 và
+  `AGENTS.md` mục 9. P2 giữ nguyên để sửa tối thiểu; **phải quyết định ở P3 trước khi có dữ liệu thật** (D-019).
+  Lưu ý: migration `20261005070000_add_unaccent` phải dùng tên cột thật (`"fullName"`, `"deletedAt"`).
+- Module `leads` để logic truy vấn ngay trong `leads.controller.ts`, thiếu `leads.service.ts` so với quy ước
+  module 4 file. P2 không sửa vì ngoài phạm vi; sẽ tách khi làm tiếp module này ở P16.
+- `npm install` báo 3 lỗ hổng mức **high**. Chưa chạy `npm audit fix` vì có thể nâng phiên bản ngoài ý muốn.
+  Phải xem lại trước khi lên triển khai (P21).
+- URL PostgreSQL thật của Aiven đã từng được commit trong `.env.example`. Bản trong repo đã thay bằng URL local,
+  nhưng **người dùng nên đổi mật khẩu `avnadmin`** trên Aiven vì khoá đó đã nằm trong lịch sử git.
+- `CREATE EXTENSION unaccent` cần quyền trên database production — kiểm tra khi lên triển khai (P21).
+- Prisma 6 cảnh báo `package.json#prisma` sẽ bị bỏ ở Prisma 7, nên chuyển sang `prisma.config.ts`. Chưa làm vì
+  ngoài phạm vi P2.
+
+## Câu hỏi cần người dùng trả lời (P2 — đã chốt hết trừ D-021)
+- **D-021: `students.email` có phải cột duy nhất không?** Một học viên có được dùng chung email với
+  người khác (ví dụ email của phụ huynh) không? Nếu **không** thì thêm `@unique` và viết migration ở P3.
+  Nếu **có** thì giữ nguyên, chỉ cần chỉnh lại test. Đặc tả thiết kế hiện chỉ ghi `student_code` là duy nhất.
   Frontend typecheck/lint/build đã chạy riêng và qua; frontend test chưa được cấu hình.
 - Frontend dùng `oxlint`; lint có cảnh báo `only-export-components` ở một số file nhưng **không có lỗi**.
 - `npm test` của frontend **chưa cấu hình** — `scripts/check.mjs` in "CHƯA CẤU HÌNH" cho bước này.

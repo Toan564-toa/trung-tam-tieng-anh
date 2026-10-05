@@ -103,39 +103,42 @@
 ### POST /api/auth/login
 - Quyền: công khai (có `loginLimiter` 20 lần / 15 phút)
 - Body: `{ "username": string, "password": string }`
-- Thành công 200: `{ "data": { "user": { "id", "username", "fullName", "roles": string[] }, "mustChangePassword": boolean } }`
+- Thành công 200: `{ "data": { "id", "username", "roles": string[], "mustChangePassword": boolean } }`
   — **không** trả access token trong body; token nằm trong cookie `httpOnly`.
-- Cookie: `accessToken` (15 phút) + `refreshToken` (7 ngày), `sameSite: "lax"`, `secure` khi `NODE_ENV=production`.
+- Cookie: `access_token` (15 phút) + `refresh_token` (7 ngày), `sameSite: "lax"`, `secure` khi `NODE_ENV=production`.
 - Lỗi: 400 `VALIDATION_ERROR`, 401 `WRONG_CREDENTIALS`, 423 `LOCKED` (sau 5 lần sai), 429 `RATE_LIMITED`.
 - Quy tắc: so khớp dùng `argon2`; tài khoản `active/locked/archived` đều không đăng nhập được.
 - File: `backend/requests/auth.http`
 
 ### POST /api/auth/refresh
-- Quyền: công khai (đọc cookie `refreshToken`)
+- Quyền: công khai (đọc cookie `refresh_token`)
 - Thành công 200: như trên + phát lại cả hai cookie.
 - Lỗi: 401 `UNAUTHENTICATED`.
 
 ### POST /api/auth/logout
-- Quyền: mọi vai trò · Thành công 204 · Xoá cả hai cookie.
+- Quyền: mọi vai trò · Thành công 200 `{ "data": { "ok": true } }` · Xoá cả hai cookie.
 
 ### GET /api/auth/me
 - Quyền: mọi vai trò (`authenticate`)
-- Thành công 200: `{ "data": { "id", "username", "email", "fullName", "roles": string[] } }`
+- Thành công 200:
+  `{ "data": { "id", "username", "email", "phone", "mustChangePassword", "lastLoginAt", "roles": string[], "teacher", "staff", "student" } }`
+  — `teacher`/`staff`/`student` là hồ sơ theo vai trò hoặc `null`.
 - Lỗi: 401 `UNAUTHENTICATED`.
 
 ### POST /api/auth/change-password
 - Quyền: mọi vai trò · Body: `{ "currentPassword", "newPassword" }`
-- Thành công 200: `{ "data": { "changed": true } }` + ghi `audit_logs` (`change_password`).
+- Thành công 200: `{ "data": { "ok": true } }` + ghi `audit_logs` (`change_password`).
 - Lỗi: 400 `VALIDATION_ERROR`, 401 `WRONG_CREDENTIALS`, 423 `LOCKED`.
 - Quy tắc: tự xoá cờ `mustChangePassword`; sau đó các phiên cũ không còn dùng được (đổi `tokenVersion`).
 
 ### GET /api/students · POST /api/students
 - Quyền: `requireRole('admin','staff')`
 - Lọc: `?search=&status=STUDYING|FROZEN|DROPPED|GRADUATED&page=&pageSize=` (mặc định 20, tối đa 100)
+- **`search` không phân biệt dấu**: gõ `nguyen` hay `nguyễn` đều ra `Nguyễn Văn A` (dùng hàm `ttnn_unaccent`).
 - Body tạo mới: `{ "fullName", "dob"?, "gender"?, "phone"?, "email"?, "address"?, "note"? }` — mã học viên **sinh tự động**.
 - Thành công: 200 `{ "data": { "items", "page", "pageSize", "total", "totalPages" } }` / 201 `{ "data": {...} }`
 - Lỗi: 400 `VALIDATION_ERROR` (kèm `details`), 403 `FORBIDDEN`.
-- Quy tắc: mỗi lần tạo/sửa đều ghi `audit_logs`; số điện thoại phải khớp `0\d{9}`.
+- Quy tắc: mỗi lần tạo/sửa đều ghi `audit_logs`; số điện thoại phải khớp `0\d{9}`; **chỉ `student_code` là duy nhất**, email trùng vẫn tạo được.
 - File: `backend/requests/students.http`
 
 ### GET/PATCH/DELETE /api/students/:id
@@ -152,9 +155,9 @@
 - File: `backend/requests/attendance.http`
 
 ### POST /api/public/leads
-- Quyền: công khai, có `publicFormLimiter`.
+- Quyền: công khai, có `publicFormLimiter` (10 lần / giờ).
 - Body: `{ "fullName", "phone", "email"?, "interestedCourse"?, "message"?, "website"? }`
-- Thành công 201: `{ "data": { "id", "status": "NEW" } }`
+- Thành công 201: `{ "data": { "ok": true } }`
 - Lỗi: 400 `VALIDATION_ERROR`, 429 `RATE_LIMITED`.
 - Quy tắc: trường ẩn `website` có giá trị (bot) vẫn trả 201 nhưng **không** ghi bản ghi.
 - File: `backend/requests/leads.http`

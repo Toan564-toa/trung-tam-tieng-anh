@@ -2,8 +2,11 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
+  // Object này phải CHỈ có `ignores` thì mới là ignore toàn cục của ESLint.
   {
     ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'src/types/express.d.ts'],
+  },
+  {
     linterOptions: {
       // Khung cũ có chú thích tắt lỗi không còn cần thiết; không báo thừa để không phải sửa mã nguồn.
       reportUnusedDisableDirectives: 'off',
@@ -29,8 +32,8 @@ export default tseslint.config(
     },
   },
   {
-    // Script dòng lệnh (seed) và báo cáo lỗi cấu hình lúc khởi động: cần in ra màn hình
-    files: ['prisma/seed.ts', 'src/config/env.ts'],
+    // Script dòng lệnh (seed), kiểm tra env lúc khởi động, chuẩn bị test: cần in ra màn hình
+    files: ['prisma/seed.ts', 'src/config/env.ts', 'tests/global-setup.ts'],
     rules: {
       'no-console': 'off',
     },

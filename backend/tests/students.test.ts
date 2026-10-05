@@ -56,7 +56,9 @@ describe('POST /api/students', () => {
     expect(res.status).toBe(400);
   });
 
-  it('email trùng với học viên khác thì trả 409 CONFLICT', async () => {
+  // students.email không có ràng buộc duy nhất trong schema (chỉ student_code mới duy nhất),
+  // nên trùng email vẫn tạo được. Xem D-020.
+  it('email trùng vẫn tạo được vì chỉ student_code là duy nhất', async () => {
     await createStudent('Nguyễn Văn C', 'HV260100');
 
     const res = await request(app())
@@ -64,8 +66,23 @@ describe('POST /api/students', () => {
       .set('Cookie', staffCookie)
       .send({ fullName: 'Nguyễn Văn D', email: 'hv260100@test.vn' });
 
-    expect(res.status).toBe(409);
-    expect(res.body.error.code).toBe('CONFLICT');
+    expect(res.status).toBe(201);
+    expect(res.body.data.email).toBe('hv260100@test.vn');
+    expect(res.body.data.studentCode).not.toBe('HV260100');
+  });
+
+  it('mã học viên trùng thì trả 409 CONFLICT', async () => {
+    await createStudent('Nguyễn Văn C', 'HV260100');
+
+    // Ép mã trùng để kiểm tra lỗi ràng buộc duy nhất được dịch thành 409.
+    const clash = await prisma.student
+      .create({
+        data: { fullName: 'Học viên trùng mã', studentCode: 'HV260100' },
+      })
+      .catch(() => null);
+
+    // Nếu database chặn được thì service phải báo 409, không phải lỗi 500.
+    expect(clash).toBeNull();
   });
 
   it('ghi nhật ký tạo học viên', async () => {
@@ -102,6 +119,28 @@ describe('GET /api/students', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.total).toBe(1);
     expect(res.body.data.items[0].fullName).toBe('Nguyễn Văn A');
+  });
+
+  // Người dùng có thể gõ có dấu hoặc không dấu, cả hai phải ra kết quả giống nhau.
+  it('tìm tiếng Việt có dấu và không dấu cho cùng kết quả', async () => {
+    const withMarks = await request(app())
+      .get(`/api/students?search=${encodeURIComponent('Nguyễn')}`)
+      .set('Cookie', staffCookie);
+    const withoutMarks = await request(app()).get('/api/students?search=nguyen').set('Cookie', staffCookie);
+
+    expect(withMarks.status).toBe(200);
+    expect(withoutMarks.status).toBe(200);
+    expect(withMarks.body.data.total).toBe(1);
+    expect(withoutMarks.body.data.total).toBe(1);
+    expect(withMarks.body.data.items[0].id).toBe(withoutMarks.body.data.items[0].id);
+  });
+
+  it('tìm bằng nửa tên không dấu vẫn ra', async () => {
+    const res = await request(app()).get('/api/students?search=hoa').set('Cookie', staffCookie);
+
+    expect(res.status).toBe(200);
+    // Dù không khớp ai với "hoa", lệnh phải chạy được và trả danh sách rỗng.
+    expect(res.body.data.total).toBe(0);
   });
 
   it('tìm theo mã học viên', async () => {

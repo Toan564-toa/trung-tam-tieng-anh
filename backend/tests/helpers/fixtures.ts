@@ -121,10 +121,11 @@ export async function enrollStudent(studentId: number, classId: number, tuitionA
   });
 }
 
-// supertest không khai báo kiểu cho getSetCookie của Node, nên đọc qua kiểu riêng.
+// supertest trả `res.headers` là object thường: set-cookie là mảng (hoặc chuỗi nếu chỉ có 1).
 function setCookies(res: request.Response): string[] {
-  const headers = res.headers as unknown as { getSetCookie?: () => string[] };
-  return headers.getSetCookie?.() ?? [];
+  const raw = res.headers['set-cookie'];
+  if (Array.isArray(raw)) return raw;
+  return typeof raw === 'string' ? [raw] : [];
 }
 
 // Lấy chuỗi cookie phiên đăng nhập để dùng cho các request sau.
