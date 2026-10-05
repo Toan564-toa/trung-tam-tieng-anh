@@ -185,3 +185,69 @@ nếu quyết định cũ sai thì thêm quyết định mới ghi "thay thế D
   khó tra cứu; quyền đã kiểm bằng `requireRole` nên không cần nhúng vào path).
 - Hệ quả: cùng một endpoint phục vụ nhiều vai trò với phạm vi dữ liệu khác nhau → **bắt buộc** kiểm tra theo dữ liệu
   ở service, không chỉ `requireRole`. Phải có test cho trường hợp đúng vai trò nhưng ngoài phạm vi (403).
+
+---
+
+# Phase 2 — Kiểm chứng khung backend
+
+## D-014: Khung backend gần như không cần sửa để biên dịch [ĐÃ CHỖT]
+- Ngày / Phase: 2026-10-05, P2
+- Bối cảnh: `HUONG-DAN-BACKEND.md` cảnh báo khung "chưa được cài thư viện, biên dịch hay chạy" và có thể có lỗi do
+  khác phiên bản (`pino-http`, kiểu của `jsonwebtoken`, cấu hình NodeNext). Thực tế kiểm chứng:
+- Kết quả kiểm chứng:
+  - `npm run typecheck` **xanh ngay lần đầu**, 0 lỗi, với `express@5`, `zod` bản mới, `jsonwebtoken` bản mới,
+    `moduleResolution: NodeNext` và `esModuleInterop: true`. Các nghi ngờ trong hướng dẫn **không xảy ra**.
+  - Import kiểu `import pinoHttp from 'pino-http'` và `import jwt from 'jsonwebtoken'` đều hợp lệ nhờ `esModuleInterop`.
+  - `expiresIn: number` của `jsonwebtoken` được chấp nhận, không cần ép kiểu `ms.StringValue`.
+- Đã chọn: **không sửa kiến trúc, không đổi API module nào.** Chỉ bổ sung phần hạ tầng còn thiếu (D-015…D-019).
+- Phương án đã loại và lý do: chỉnh lại code cho "chuẩn hơn" khi không có lỗi (vi phạm "sửa tối thiểu" của P2).
+
+## D-015: `.env.example` không được chứa thông tin thật [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-05, P2
+- Bối cảnh: `.env.example` gốc chứa **URL PostgreSQL thật của Aiven** kèm tên đăng nhập và mật khẩu
+  (`avnadmin:AVNS_…@pg-3fbe2c6a-…aivencloud.com`). Đây là bí mật đã được commit (vi phạm `AGENTS.md` mục 7).
+- Đã chọn: thay bằng URL PostgreSQL local khớp `docker-compose.yml`, đặt khoá thật chỉ trong `.env` (đã gitignore)
+  và sinh bằng `crypto.randomBytes(48)`. Hai khoá JWT trong file mẫu giữ dạng placeholder.
+- Phương án đã loại và lý do: giữ URL cloud trong file mẫu (rò rỉ bí mật); dùng luôn database cloud cho phát triển
+  và test (test sẽ xoá sạch dữ liệu — nguy hiểm).
+- Hệ quả: nếu sau này dùng database cloud thì đặt URL vào `.env` cục bộ, **không** commit.
+  Nếu khoá đã bị lộ, cần đổi mật khẩu `avnadmin` trên Aiven — cần người dùng tự làm.
+
+## D-016: Test dùng database riêng, xoá và dựng lại trước mỗi lần chạy [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-05, P2
+- Bối cảnh: test cần dữ liệu sạch và không được chạm database phát triển.
+- Đã chọn: `TEST_DATABASE_URL` trỏ tới `trung_tam_test`. `tests/global-setup.ts` **xoá và tạo lại** database này
+  rồi chạy `prisma migrate deploy`; mỗi test file gọi `resetDatabase()` (`TRUNCATE … RESTART IDENTITY CASCADE`)
+  trước mỗi test. Các test chạy tuần tự (`fileParallelism: false`) vì dùng chung một database.
+- Phương án đã loại và lý do: dùng chung database phát triển (`prisma migrate reset` rất dễ mất dữ liệu thật —
+  `AGENTS.md` mục 9); transaction rollback cho từng test (PostgreSQL + Prisma không rollback được khi test gọi HTTP
+  qua nhiều connection).
+- Hệ quả: cần `POSTGRES` user có quyền `CREATE DATABASE`. `npm test` không chạy được nếu PostgreSQL chưa bật —
+  script sẽ báo rõ.
+
+## D-017: npm 11 chặn install script — phải duyệt cho Prisma và argon2 [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-05, P2
+- Bối cảnh: `npm install` báo `install-scripts … not yet covered by allowScripts` và **không** chạy script của
+  `@prisma/client`, `@prisma/engines`, `prisma`, `argon2`, `esbuild`. Hậu quả: Prisma Client không được sinh,
+  argon2 không có binding native.
+- Đã chọn: chạy `npm install-scripts approve @prisma/client @prisma/engines argon2 esbuild prisma` rồi
+  `npx prisma generate`. Đã kiểm chứng: argon2 băm/xác minh được, Prisma Client sinh thành công.
+- Hệ quả: ghi vào `backend/README.md` vì máy mới phải làm lại bước này.
+
+## D-018: Nới hạn mức rate limit khi `NODE_ENV=test` [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-05, P2
+- Bối cảnh: `loginLimiter` giới hạn 20 lần/15 phút. Bộ test cố tình đăng nhập sai 5 lần để kiểm tra khoá tài khoản,
+  nhiều file test cộng dồn sẽ vượt 20 và nhận `429` trước khi tới bước kiểm tra `423`.
+- Đã chọn: `src/middlewares/rateLimit.ts` đọc `NODE_ENV`; ở `test` nới lên 100 000, ở môi trường thật giữ nguyên
+  giá trị cũ (600 / 20 / 10).
+- Hệ quả: giới hạn thật **không** bị nới lỏng; test vẫn kiểm tra được hành vi 423.
+
+## D-019: Cột database tạm dùng camelCase, chưa đổi sang snake_case [CẦN XÁC NHẬN]
+- Ngày / Phase: 2026-10-05, P2
+- Bối cảnh: `schema.prisma` dùng camelCase cho **tên bảng đã** `@@map` sang snake_case, nhưng **cột** chưa `@map`.
+  Điều này **trái với D-004** và `AGENTS.md` mục 9. `HUONG-DAN-BACKEND.md` mục 10 cũng nói "nên quyết định trước
+  khi có dữ liệu thật".
+- Đã chọn (tạm): **giữ nguyên camelCase ở P2** vì nhiệm vụ là kiểm chứng khung và "sửa tối thiểu"; thêm `@map` cho
+  ~90 cột là thay đổi lớn, phải làm trước khi có dữ liệu thật và cần chạy lại toàn bộ truy vấn.
+- Phương án đã loại và lý do: đổi ngay ở P2 (vượt phạm vi, rủi ro cao khi migration chưa từng chạy thật).
+- Hệ quả: **phải quyết định ở P3 trước khi seed dữ liệu thật.** Đã ghi vào `docs/PROGRESS.md`.

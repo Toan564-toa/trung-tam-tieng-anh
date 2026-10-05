@@ -1,10 +1,11 @@
 # Tiến độ dự án
 
 ## Trạng thái hiện tại
-- Phase đang làm: **P1 — Kiểm kê frontend, lập hợp đồng dữ liệu** (xong, chờ trả lời câu hỏi ở mục "Câu hỏi cần người dùng trả lời")
-- Phase tiếp theo: **P2 — Kiểm chứng khung backend** (cần đặt mã nguồn backend vào `backend/`)
-- Lệnh chạy dự án: `npm run dev:fe` (frontend, `http://localhost:5173`) · `npm run dev:be` (backend, **chưa có mã nguồn**)
-- Cập nhật lần cuối: 2026-10-04, phiên 2 (P1)
+- Phase đang làm: **P2 — Kiểm chứng khung backend** (đang làm; chờ PostgreSQL để chạy migrate/seed/server/test)
+- Phase tiếp theo: **P3 — Schema đầy đủ và dữ liệu mẫu**
+- Lệnh chạy dự án: `npm run dev:fe` (frontend) · `npm run dev:be` (backend, `http://localhost:4000`)
+- Cập nhật lần cuối: 2026-10-05, phiên 3 (P2)
+- Chi tiết P2: `backend/README.md`, `docs/DECISIONS.md` D-014…D-019
 
 ## Danh sách phase
 ### Chuẩn bị
@@ -53,11 +54,45 @@ Thứ tự này xuất ra từ ma trận quyền (`docs/PERMISSIONS.md`) và h�
 | 10 | `notifications, audit_logs, settings, sequences, files` + view báo cáo (P18) | Dashboard, báo cáo, cài đặt; `audit_logs` bắt buộc từ Mốc 1 |
 
 ## Nhật ký bàn giao (mới nhất ở trên)
+### Phiên 3: 2026-10-05 (P2 — kiểm chứng khung backend; **đang dở**, chờ PostgreSQL)
+- Đã làm:
+  - Mã nguồn khung backend đã có trong `backend/` (`src/`, `prisma/`, `package.json`, `tsconfig.json`,
+    `docker-compose.yml`). Hướng dẫn gốc dời từ `backend/docs/spec/` lên `backend/HUONG-DAN-BACKEND.md`.
+  - `npm install` + duyệt install script cho Prisma và argon2 (npm 11 chặn mặc định) → `npx prisma generate`
+    **thành công**, argon2 băm/xác minh được. Xem D-017.
+  - `npm run typecheck` **xanh ngay lần đầu**, không phải sửa kiến trúc (D-014).
+  - Bổ sung hạ tầng còn thiếu: ESLint flat config, Prettier (`printWidth: 120`), `tsconfig.test.json`
+    (typecheck cả test và seed), script `lint`/`format`/`test`/`test:watch` trong `backend/package.json`.
+  - **Sửa `.env.example`**: bỏ URL Aiven thật kèm mật khẩu `avnadmin` đã bị commit, thay bằng PostgreSQL local;
+    thêm `TEST_DATABASE_URL`. Khoá JWT thật chỉ nằm trong `.env` gitignore. Xem D-015.
+  - 6 file test (Vitest + supertest): đăng nhập/khoá tài khoản/đổi mật khẩu, phân quyền theo vai trò,
+    CRUD học viên + xoá mềm, quyền điểm danh theo lớp + buổi khoá, form tư vấn công khai + rate limit.
+    Database test riêng `trung_tam_test`, xoá và dựng lại trước mỗi lần chạy (D-016).
+  - Nới rate limit khi `NODE_ENV=test` để không che mất lỗi 423 (D-018).
+  - 4 file `backend/requests/*.http` để gọi thử bằng tay (auth, students, leads, attendance).
+  - `backend/README.md` viết lại theo thực tế đã kiểm chứng.
+  - `docs/DECISIONS.md` thêm D-014…D-019.
+- Chưa làm (cần PostgreSQL — **người dùng đang cài Docker Desktop**):
+  - `docker compose up -d` → `npx prisma migrate dev --name init` → `npm run db:seed`
+  - Đã chạy `npm run check`: backend typecheck/lint xanh, nhưng test dừng ở global setup vì PostgreSQL
+    `localhost:5432` chưa chạy; do đó các test và fixture đã biết trong `tests/attendance.test.ts` chưa được xác minh.
+    Backend build riêng xanh. Frontend typecheck/lint/build xanh; test frontend hiện chỉ là placeholder.
+  - Chạy `npm run dev` và gọi thử API thật.
+- Lệnh sẽ chạy ngay khi có PostgreSQL:
+  ```
+  cd backend
+  docker compose up -d
+  npx prisma migrate dev --name init
+  npm run db:seed
+  npm test
+  npm run dev
+  ```
+
 ### Phiên 2: 2026-10-04 (P1 — kiểm kê và hợp đồng dữ liệu)
 - Đã làm:
   - **Tìm thấy và chép 3 đặc tả gốc** từ `E:\tải\` vào repo:
     `docs/spec/quan-ly-trung-tam-ngoai-ngu.md`, `docs/spec/thiet-ke-database-day-du.md`,
-    `backend/docs/spec/HUONG-DAN-BACKEND.md`. Tìm thấy cả `trung-tam-backend.zip` ở `E:\tải\`
+    `backend/HUONG-DAN-BACKEND.md`. Tìm thấy cả `trung-tam-backend.zip` ở `E:\tải\`
     (**chưa giải nén** — nằm ngoài phạm vi P1).
   - `docs/FRONTEND-CONTRACT.md` viết lại từ đầu: phần A (nguyên tắc), B (38 thực thể ↔ bảng DB, 14 nhóm cột
     UI cần nhưng DB chưa có, 12 nhóm cột DB có nhưng UI chưa dùng), C (46 màn + landing, mỗi màn có route,
@@ -117,18 +152,28 @@ Chi tiết đầy đủ ở `docs/FRONTEND-CONTRACT.md` phần D, E, F. Các l�
 - `role-home-page.tsx` không được route nhưng còn chuỗi cứng trong một số màn (F10).
 
 ## Vấn đề đã biết
-- `npm run check` in bước "CHƯA CẤU HÌNH" cho backend (chưa có `backend/package.json`) và cho `test` của frontend.
-  Đây là **cảnh báo**, không phải kết quả xanh — xem `scripts/check.mjs`.
+- **`npm run check` ở gốc chưa xanh**: backend typecheck/lint qua, nhưng test cần PostgreSQL tại `localhost:5432`
+  để dựng database test; hiện database chưa chạy nên bước build tiếp theo không được gọi bởi script tổng.
+  Frontend typecheck/lint/build đã chạy riêng và qua; frontend test chưa được cấu hình.
 - Frontend dùng `oxlint`; lint có cảnh báo `only-export-components` ở một số file nhưng **không có lỗi**.
-- Chưa có test runner ở cả hai phía (sẽ thêm ở P2/P3 cho backend).
+- `npm test` của frontend **chưa cấu hình** — `scripts/check.mjs` in "CHƯA CẤU HÌNH" cho bước này.
+  Đây là cảnh báo, không phải xanh. Sẽ thêm test runner cho frontend ở phase NỐI.
 - Repo trước đó chỉ có commit `006fe9b add: initial interface` chứa 40 file trong `.kilo/worktrees/raspy-xenon/` và một
   **gitlink hỏng** cho `frontend`. P0 đã gỡ `.kilo` khỏi tracking và đưa mã nguồn `frontend/` vào tracking như file thường.
 - Remote `origin` đang trỏ tới `https://github.com/Toan564-toa/trung-tam-tieng-anh.git` (khác tên thư mục
   `trung-tam-ngoai-ngu`) — **cần xác nhận trước khi push**, chưa push gì.
-- `backend/docs/spec/HUONG-DAN-BACKEND.md` nói "mã nguồn đã được viết" nhưng thư mục `backend/` không có file nào
-  → phải đặt mã nguồn vào trước khi P2 kiểm chứng được.
+- **`schema.prisma` dùng tên cột camelCase** (tên bảng đã `@@map` sang snake_case) → trái với D-004 và
+  `AGENTS.md` mục 9. P2 giữ nguyên để sửa tối thiểu; **phải quyết định ở P3 trước khi có dữ liệu thật** (D-019).
+- Module `leads` để logic truy vấn ngay trong `leads.controller.ts`, thiếu `leads.service.ts` so với quy ước
+  module 4 file. P2 không sửa vì ngoài phạm vi; sẽ tách khi làm tiếp module này ở P16.
+- `npm install` báo 3 lỗ hổng mức **high**. Chưa chạy `npm audit fix` vì có thể nâng phiên bản ngoài ý muốn.
+  Phải xem lại trước khi lên triển khai (P21).
+- URL PostgreSQL thật của Aiven đã từng được commit trong `.env.example`. Bản trong repo đã thay bằng URL local,
+  nhưng **người dùng nên đổi mật khẩu `avnadmin`** trên Aiven vì khoá đó đã nằm trong lịch sử git.
 
 ## Việc phát sinh (ngoài phạm vi, chờ quyết định)
 - Có thể chuyển sang **npm workspaces** thay vì `npm --prefix` khi khung backend có sẵn (xem D-001).
-- Chưa chốt công cụ test cho backend (Node built-in test hay Vitest) — chốt ở P2.
-- `trung-tam-backend.zip` chờ người dùng cho phép giải nén vào `backend/`.
+- ~~Chưa chốt công cụ test cho backend~~ → **đã chốt Vitest** ở P2 (D-016).
+- ~~`trung-tam-backend.zip` chờ cho phép giải nén~~ → không cần nữa, mã nguồn đã có trong `backend/`.
+- Cần quyết định tên cột database (camelCase hay snake_case) trước P3 — D-019.
+- Cần tách `leads.service.ts` khỏi controller ở P16.

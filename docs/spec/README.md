@@ -8,7 +8,7 @@ Thư mục này chứa **đặc tả gốc** của dự án (bản Markdown do n
 > | --- | --- | --- |
 > | `quan-ly-trung-tam-ngoai-ngu.md` | Đặc tả chức năng theo vai trò | Ma trận quyền, phạm vi màn hình, mục D/E của hợp đồng dữ liệu |
 > | `thiet-ke-database-day-du.md` | Thiết kế database 40+ bảng, ưu tiên P1/P2/P3 | Mục B của hợp đồng dữ liệu, phase P3 (schema) |
-> | `../backend/docs/spec/HUONG-DAN-BACKEND.md` | Hướng dẫn khung backend | Phase P2 |
+> | `../../backend/HUONG-DAN-BACKEND.md` | Hướng dẫn khung backend (do người viết khung cung cấp) | Phase P2/P3 |
 >
 > `docs/FRONTEND-CONTRACT.md`, `docs/PERMISSIONS.md` và `docs/DECISIONS.md` (D-008) đã được viết lại theo hai đặc tả này.
 > Các câu hỏi nghiệp vụ còn mở nằm ở `docs/FRONTEND-CONTRACT.md` phần G và `docs/PROGRESS.md`.

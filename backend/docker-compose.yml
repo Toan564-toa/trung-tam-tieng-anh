@@ -1,0 +1,17 @@
+# PostgreSQL cho môi trường phát triển. Chạy: docker compose up -d
+services:
+  db:
+    image: postgres:16
+    container_name: trung_tam_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: trung_tam
+    ports:
+      - "5432:5432"
+    volumes:
+      - trung_tam_pgdata:/var/lib/postgresql/data
+
+volumes:
+  trung_tam_pgdata:

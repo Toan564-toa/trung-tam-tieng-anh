@@ -1,0 +1,87 @@
+### REST Client của VS Code.
+### Có 2 nhóm: form công khai (không cần đăng nhập) và quản lý nội bộ (cần cookie).
+
+@baseUrl = http://localhost:4000
+
+### ============ FORM TƯ VẤN CÔNG KHAI (không đăng nhập) ============
+
+### 1. Gửi yêu cầu tư vấn từ landing page
+# @name createLead
+POST {{baseUrl}}/api/public/leads
+Content-Type: application/json
+
+{
+  "fullName": "Trần Thị B",
+  "phone": "0987654321",
+  "email": "tranthib@example.vn",
+  "interestedCourse": "Khóa giao tiếp lộ trình 64 buổi",
+  "message": "Mình muốn hỏi lịch học tối"
+}
+
+### 2. Thiếu số điện thoại -> 400 VALIDATION_ERROR
+POST {{baseUrl}}/api/public/leads
+Content-Type: application/json
+
+{
+  "fullName": "Trần Thị B"
+}
+
+### 3. Email sai định dạng -> 400
+POST {{baseUrl}}/api/public/leads
+Content-Type: application/json
+
+{
+  "fullName": "Trần Thị B",
+  "phone": "0987654321",
+  "email": "khong-phai-email"
+}
+
+### 4. Ô ẩn chống bot có giá trị -> 201 nhưng KHÔNG tạo bản ghi
+POST {{baseUrl}}/api/public/leads
+Content-Type: application/json
+
+{
+  "fullName": "Bot Spam",
+  "phone": "0900000000",
+  "website": "http://spam.example"
+}
+
+### 5. Gửi liên tục để thấy giới hạn tốc độ -> 429 TOO_MANY_REQUESTS
+POST {{baseUrl}}/api/public/leads
+Content-Type: application/json
+
+{
+  "fullName": "Gửi nhiều lần",
+  "phone": "0900000001"
+}
+
+### ============ QUẢN LÝ KHÁCH TIỀM NĂNG (cần đăng nhập) ============
+
+### 6. Không đăng nhập -> 401
+GET {{baseUrl}}/api/leads
+
+### 7. Danh sách khách tiềm năng
+GET {{baseUrl}}/api/leads
+
+### 8. Lọc theo giai đoạn (NEW | CONTACTED | TRIAL | WON | LOST)
+GET {{baseUrl}}/api/leads?status=NEW
+
+### 9. Phân trang
+GET {{baseUrl}}/api/leads?page=1&pageSize=5
+
+### 10. Đổi giai đoạn và ghi chú
+PATCH {{baseUrl}}/api/leads/{{createLead.response.body.data.id}}
+Content-Type: application/json
+
+{
+  "status": "CONTACTED",
+  "note": "Đã gọi lần 1, hẹn thử lớp thứ 7"
+}
+
+### 11. Giai đoạn sai -> 400
+PATCH {{baseUrl}}/api/leads/{{createLead.response.body.data.id}}
+Content-Type: application/json
+
+{
+  "status": "ABC"
+}

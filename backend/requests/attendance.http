@@ -1,0 +1,91 @@
+### REST Client của VS Code. Chạy sau auth.http (đã đăng nhập).
+### Quyền: admin và nhân viên xem/sửa mọi lớp; giáo viên chỉ lớp mình phụ trách.
+### Cần có dữ liệu lớp + buổi học. Xem backend/prisma/seed.ts hoặc module classes (P8) sẽ có API tạo lớp.
+
+@baseUrl = http://localhost:4000
+@classId = 1
+@sessionId = 1
+@studentId = 1
+
+### 1. Không đăng nhập -> 401
+GET {{baseUrl}}/api/attendance/sessions/{{sessionId}}
+
+### 2. Học viên đăng nhập -> 403 (requireRole chỉ cho admin, staff, teacher)
+GET {{baseUrl}}/api/attendance/sessions/{{sessionId}}
+
+### 3. Xem danh sách học viên và trạng thái điểm danh của một buổi
+# @name getSession
+GET {{baseUrl}}/api/attendance/sessions/{{sessionId}}
+
+### 4. Giáo viên xem buổi của lớp mình phụ trách -> 200
+GET {{baseUrl}}/api/attendance/sessions/{{sessionId}}
+
+### 5. Giáo viên xem buổi của lớp người khác -> 403 FORBIDDEN
+GET {{baseUrl}}/api/attendance/sessions/999
+
+### 6. Buổi học không tồn tại -> 404
+GET {{baseUrl}}/api/attendance/sessions/999999
+
+### 7. sessionId không phải số -> 400
+GET {{baseUrl}}/api/attendance/sessions/abc
+
+### 8. Điểm danh (ghi đè nếu đã có, không tạo bản ghi trùng)
+# @name markAttendance
+PUT {{baseUrl}}/api/attendance/sessions/{{sessionId}}
+Content-Type: application/json
+
+{
+  "records": [
+    { "studentId": 1, "status": "PRESENT" },
+    { "studentId": 2, "status": "LATE", "note": "Đến muộn 10 phút" },
+    { "studentId": 3, "status": "ABSENT" },
+    { "studentId": 4, "status": "EXCUSED", "note": "Có giấy xin phép" }
+  ]
+}
+
+### 9. Đọc lại để xác nhận đã lưu
+GET {{baseUrl}}/api/attendance/sessions/{{sessionId}}
+
+### 10. Điểm danh học viên không thuộc lớp -> 400
+PUT {{baseUrl}}/api/attendance/sessions/{{sessionId}}
+Content-Type: application/json
+
+{
+  "records": [{ "studentId": 999999, "status": "PRESENT" }]
+}
+
+### 11. Một học viên xuất hiện hai lần -> 400 VALIDATION_ERROR
+PUT {{baseUrl}}/api/attendance/sessions/{{sessionId}}
+Content-Type: application/json
+
+{
+  "records": [
+    { "studentId": 1, "status": "PRESENT" },
+    { "studentId": 1, "status": "ABSENT" }
+  ]
+}
+
+### 12. Danh sách rỗng -> 400
+PUT {{baseUrl}}/api/attendance/sessions/{{sessionId}}
+Content-Type: application/json
+
+{
+  "records": []
+}
+
+### 13. Trạng thái không hợp lệ -> 400
+PUT {{baseUrl}}/api/attendance/sessions/{{sessionId}}
+Content-Type: application/json
+
+{
+  "records": [{ "studentId": 1, "status": "KHONG_CO" }]
+}
+
+### 14. Buổi đã khóa: giáo viên/nhân viên sửa -> 423 LOCKED, chỉ admin được sửa
+###     (đặt lockedAt trong DB trước, hoặc dùng module mở khóa ở phase sau)
+PUT {{baseUrl}}/api/attendance/sessions/{{sessionId}}
+Content-Type: application/json
+
+{
+  "records": [{ "studentId": 1, "status": "PRESENT" }]
+}

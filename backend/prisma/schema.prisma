@@ -1,0 +1,356 @@
+// Schema khởi đầu (đợt 1-2 của thiết kế database). Mở rộng dần theo file thiết kế đầy đủ.
+// Lưu ý: tên trường dùng camelCase trong code; tên bảng ánh xạ sang snake_case số nhiều.
+// Muốn cột snake_case trong DB, thêm @map("ten_cot") cho từng trường.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  LOCKED
+  DISABLED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum StudentStatus {
+  STUDYING
+  FROZEN
+  DROPPED
+  GRADUATED
+}
+
+enum ClassStatus {
+  PLANNED
+  ACTIVE
+  FINISHED
+  CANCELLED
+}
+
+enum SessionStatus {
+  SCHEDULED
+  HELD
+  CANCELLED
+  MAKEUP
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  FROZEN
+  DROPPED
+  COMPLETED
+  TRANSFERRED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum AttendanceMethod {
+  MANUAL
+  QR
+  FACE
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  TRIAL
+  WON
+  LOST
+}
+
+// ---------- Tài khoản và phân quyền ----------
+
+model Role {
+  id    Int        @id @default(autoincrement())
+  code  String     @unique // admin | staff | teacher | student | guardian
+  name  String
+  users UserRole[]
+
+  @@map("roles")
+}
+
+model User {
+  id               Int            @id @default(autoincrement())
+  username         String         @unique
+  email            String?        @unique
+  phone            String?
+  passwordHash     String
+  status           UserStatus     @default(ACTIVE)
+  mustChangePassword Boolean      @default(true)
+  failedLoginCount Int            @default(0)
+  lockedUntil      DateTime?
+  lastLoginAt      DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  deletedAt        DateTime?
+
+  roles            UserRole[]
+  teacher          Teacher?
+  staff            Staff?
+  student          Student?
+  attendanceMarked Attendance[]
+  auditLogs        AuditLog[]
+  loginHistory     LoginHistory[]
+
+  @@map("users")
+}
+
+model UserRole {
+  userId Int
+  roleId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model LoginHistory {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  username  String
+  success   Boolean
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("login_history")
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  action    String
+  tableName String
+  recordId  String?
+  oldData   Json?
+  newData   Json?
+  ip        String?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tableName, recordId])
+  @@index([userId])
+  @@map("audit_logs")
+}
+
+// Bộ đếm sinh mã không trùng (mã học viên, số biên lai...)
+model Sequence {
+  key       String @id // ví dụ: "student-2026"
+  lastValue Int    @default(0)
+
+  @@map("sequences")
+}
+
+// ---------- Con người ----------
+
+model Teacher {
+  id            Int       @id @default(autoincrement())
+  userId        Int       @unique
+  teacherCode   String    @unique
+  fullName      String
+  phone         String?
+  specialty     String?
+  showOnWebsite Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  classes       Class[]
+  sessions      ClassSession[]
+
+  @@map("teachers")
+}
+
+model Staff {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @unique
+  staffCode String    @unique
+  fullName  String
+  phone     String?
+  position  String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  students  Student[]
+  leads     Lead[]
+
+  @@map("staff")
+}
+
+model Student {
+  id          Int           @id @default(autoincrement())
+  userId      Int?          @unique
+  studentCode String        @unique
+  fullName    String
+  dob         DateTime?     @db.Date
+  gender      Gender?
+  phone       String?
+  email       String?
+  address     String?
+  note        String?
+  status      StudentStatus @default(STUDYING)
+  advisorId   Int?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  deletedAt   DateTime?
+
+  user        User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  advisor     Staff?         @relation(fields: [advisorId], references: [id], onDelete: SetNull)
+  enrollments Enrollment[]
+  attendance  Attendance[]
+
+  @@index([phone])
+  @@index([fullName])
+  @@map("students")
+}
+
+// ---------- Đào tạo ----------
+
+model Course {
+  id              Int       @id @default(autoincrement())
+  code            String    @unique
+  name            String
+  level           String?
+  totalSessions   Int       @default(64)
+  sessionsPerWeek Int       @default(2)
+  durationMonths  Int       @default(8)
+  listPrice       Int       @default(0) // VND, số nguyên
+  isPublic        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  classes         Class[]
+
+  @@map("courses")
+}
+
+model Class {
+  id              Int         @id @default(autoincrement())
+  courseId        Int
+  teacherId       Int
+  classCode       String      @unique
+  name            String
+  startDate       DateTime    @db.Date
+  expectedEndDate DateTime?   @db.Date
+  maxStudents     Int         @default(20)
+  status          ClassStatus @default(PLANNED)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  deletedAt       DateTime?
+
+  course          Course         @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  teacher         Teacher        @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  sessions        ClassSession[]
+  enrollments     Enrollment[]
+
+  @@index([teacherId])
+  @@index([courseId])
+  @@map("classes")
+}
+
+model ClassSession {
+  id        Int           @id @default(autoincrement())
+  classId   Int
+  lessonNo  Int // buổi thứ mấy trong lộ trình (1-64)
+  date      DateTime      @db.Date
+  startTime String? // "18:00"
+  endTime   String? // "19:30"
+  teacherId Int? // giáo viên dạy thực tế
+  status    SessionStatus @default(SCHEDULED)
+  lockedAt  DateTime? // đã khóa sửa điểm danh
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  class      Class        @relation(fields: [classId], references: [id], onDelete: Restrict)
+  teacher    Teacher?     @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  attendance Attendance[]
+
+  @@unique([classId, lessonNo])
+  @@index([date])
+  @@map("class_sessions")
+}
+
+model Enrollment {
+  id            Int              @id @default(autoincrement())
+  studentId     Int
+  classId       Int
+  enrolledAt    DateTime         @default(now())
+  totalSessions Int // chụp lại số buổi lúc ghi danh (ví dụ 64)
+  tuitionAmount Int // chụp lại học phí lúc ghi danh (VND)
+  status        EnrollmentStatus @default(ACTIVE)
+  createdById   Int?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  student       Student          @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  class         Class            @relation(fields: [classId], references: [id], onDelete: Restrict)
+
+  @@unique([studentId, classId])
+  @@index([classId])
+  @@map("enrollments")
+}
+
+model Attendance {
+  id             Int              @id @default(autoincrement())
+  classSessionId Int
+  studentId      Int
+  status         AttendanceStatus
+  method         AttendanceMethod @default(MANUAL)
+  note           String?
+  markedById     Int?
+  markedAt       DateTime         @default(now())
+
+  session        ClassSession     @relation(fields: [classSessionId], references: [id], onDelete: Restrict)
+  student        Student          @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  markedBy       User?            @relation(fields: [markedById], references: [id], onDelete: SetNull)
+
+  @@unique([classSessionId, studentId])
+  @@index([studentId])
+  @@map("attendance")
+}
+
+// ---------- Tuyển sinh ----------
+
+model Lead {
+  id               Int        @id @default(autoincrement())
+  fullName         String
+  phone            String
+  email            String?
+  interestedCourse String?
+  source           String?
+  message          String?
+  status           LeadStatus @default(NEW)
+  assignedToId     Int?
+  note             String?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  assignedTo       Staff?     @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([phone])
+  @@map("leads")
+}

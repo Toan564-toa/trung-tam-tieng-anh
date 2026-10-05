@@ -1,0 +1,88 @@
+### REST Client của VS Code. Chạy sau auth.http (đã đăng nhập admin).
+### Tài khoản nhân viên và giáo viên: xem backend/prisma/seed.ts hoặc tạo qua tài khoản admin.
+
+@baseUrl = http://localhost:4000
+
+### 1. Danh sách học viên, phân trang mặc định 20
+GET {{baseUrl}}/api/students
+
+### 2. Tìm theo tên hoặc mã học viên
+GET {{baseUrl}}/api/students?search=Nguyen
+
+### 3. Lọc theo trạng thái (STUDYING | FROZEN | DROPPED | GRADUATED)
+GET {{baseUrl}}/api/students?status=STUDYING
+
+### 4. Phân trang
+GET {{baseUrl}}/api/students?page=2&pageSize=10
+
+### 5. Trạng thái sai -> 400 VALIDATION_ERROR
+GET {{baseUrl}}/api/students?status=ABC
+
+### 6. pageSize vượt 100 -> 400
+GET {{baseUrl}}/api/students?pageSize=500
+
+### 7. Không đăng nhập -> 401
+GET {{baseUrl}}/api/students
+
+### 8. Tạo học viên (mã học viên được sinh tự động, không cần nhập)
+# @name createStudent
+POST {{baseUrl}}/api/students
+Content-Type: application/json
+
+{
+  "fullName": "Nguyễn Văn A",
+  "dob": "2000-05-12",
+  "gender": "MALE",
+  "phone": "0912345678",
+  "email": "nguyenvana@example.vn",
+  "address": "123 Nguyễn Trãi, Quận 1, TP.HCM"
+}
+
+### 9. Tạo học viên thiếu họ tên -> 400 kèm details
+POST {{baseUrl}}/api/students
+Content-Type: application/json
+
+{
+  "phone": "0912345678"
+}
+
+### 10. Tạo học viên với số điện thoại sai -> 400
+POST {{baseUrl}}/api/students
+Content-Type: application/json
+
+{
+  "fullName": "Trần Thị B",
+  "phone": "khong-phai-so-dien-thoai"
+}
+
+### 11. Chi tiết một học viên
+GET {{baseUrl}}/api/students/{{createStudent.response.body.data.id}}
+
+### 12. id không hợp lệ -> 400
+GET {{baseUrl}}/api/students/abc
+
+### 13. Sửa học viên
+PATCH {{baseUrl}}/api/students/{{createStudent.response.body.data.id}}
+Content-Type: application/json
+
+{
+  "phone": "0900000000",
+  "note": "Đã đổi số điện thoại"
+}
+
+### 14. Đổi trạng thái học viên
+PATCH {{baseUrl}}/api/students/{{createStudent.response.body.data.id}}
+Content-Type: application/json
+
+{
+  "status": "FROZEN"
+}
+
+### 15. Xoá mềm (chỉ admin) -> 204, bản ghi vẫn còn trong DB
+DELETE {{baseUrl}}/api/students/{{createStudent.response.body.data.id}}
+
+### 16. Sau khi xoá mềm, đọc lại -> 404
+GET {{baseUrl}}/api/students/{{createStudent.response.body.data.id}}
+
+### 17. Danh sách không còn học viên đã xoá
+GET {{baseUrl}}/api/students?search=Nguyen

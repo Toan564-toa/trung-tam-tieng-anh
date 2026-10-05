@@ -1,0 +1,93 @@
+### REST Client của VS Code (extension "REST Client")
+### Cách dùng:
+###   1. Server đang chạy: npm run dev   (hoặc npm run build && npm start)
+###   2. Đã có dữ liệu: npx prisma migrate dev --name init  rồi  npm run db:seed
+###   3. Bấm "Send Request" trên từng khối. Chạy tuần tự từ trên xuống.
+
+@baseUrl = http://localhost:4000
+@adminUser = admin
+### Mật khẩu admin lấy từ SEED_ADMIN_PASSWORD trong file .env
+@adminPass = DoiMatKhauNay@123
+### Sau khi đổi mật khẩu ở request cuối, cập nhật biến này
+@newPass = MatKhauMoi@123
+
+### 1. Kiểm tra server và database
+GET {{baseUrl}}/health
+
+### 2. Đăng nhập sai (kiểm tra lỗi 401)
+# @name loginWrong
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "{{adminUser}}",
+  "password": "SaiMatKhau"
+}
+
+### 3. Đăng nhập đúng. Response có Set-Cookie: access_token, refresh_token (httpOnly)
+# @name login
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "{{adminUser}}",
+  "password": "{{adminPass}}"
+}
+
+### 4. Xem tài khoản đang đăng nhập (cần cookie access_token)
+# @name me
+GET {{baseUrl}}/api/auth/me
+
+### 4b. Dán accessToken lấy tay từ DevTools > Application > Cookies
+###     (REST Client không tự đọc cookie httpOnly; token KHÔNG nằm trong body của response)
+GET {{baseUrl}}/api/auth/me
+Cookie: access_token=DAN_TOKEN_VAO_DAY
+
+### 5. Thông tin tài khoản KHÔNG đăng nhập -> 401
+GET {{baseUrl}}/api/auth/me
+
+### 6. Làm mới phiên bằng refresh token (cần cookie refresh_token)
+POST {{baseUrl}}/api/auth/refresh
+
+### 7. Đổi mật khẩu (bắt buộc lần đầu với tài khoản seed: mustChangePassword = true)
+# @name changePassword
+POST {{baseUrl}}/api/auth/change-password
+Content-Type: application/json
+
+{
+  "currentPassword": "{{adminPass}}",
+  "newPassword": "{{newPass}}"
+}
+
+### 8. Đổi mật khẩu sai mật khẩu hiện tại -> 400
+POST {{baseUrl}}/api/auth/change-password
+Content-Type: application/json
+
+{
+  "currentPassword": "KhongDungMatKhau",
+  "newPassword": "{{newPass}}"
+}
+
+### 9. Mật khẩu mới quá ngắn -> 400 VALIDATION_ERROR
+POST {{baseUrl}}/api/auth/change-password
+Content-Type: application/json
+
+{
+  "currentPassword": "{{newPass}}",
+  "newPassword": "Ngan"
+}
+
+### 10. Đăng nhập lại bằng mật khẩu mới
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "{{adminUser}}",
+  "password": "{{newPass}}"
+}
+
+### 11. Đăng xuất (xoá cookie)
+POST {{baseUrl}}/api/auth/logout
+
+### 12. Sau khi đăng xuất, /me phải trả 401
+GET {{baseUrl}}/api/auth/me

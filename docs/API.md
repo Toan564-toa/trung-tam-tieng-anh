@@ -33,15 +33,15 @@
 
 | # | Method + Path | Quyền | Màn hình dùng | Module | Trạng thái |
 | --- | --- | --- | --- | --- | --- |
-| 1 | `POST /api/auth/login` | công khai | Đăng nhập (4 vai trò) | auth | chưa có |
-| 2 | `POST /api/auth/logout` | mọi vai trò | Menu người dùng | auth | chưa có |
-| 3 | `POST /api/auth/change-password` | mọi vai trò | Đổi mật khẩu | auth | chưa có |
-| 4 | `GET /api/auth/me` | mọi vai trò | Hồ sơ cá nhân | auth | chưa có |
+| 1 | `POST /api/auth/login` | công khai | Đăng nhập (4 vai trò) | auth | **đã có (P2)** |
+| 2 | `POST /api/auth/logout` | mọi vai trò | Menu người dùng | auth | **đã có (P2)** |
+| 3 | `POST /api/auth/change-password` | mọi vai trò | Đổi mật khẩu | auth | **đã có (P2)** |
+| 4 | `GET /api/auth/me` | mọi vai trò | Hồ sơ cá nhân | auth | **đã có (P2)** |
 | 5 | `GET/POST /api/users` | admin | Tài khoản & phân quyền | users | chưa có |
 | 6 | `PATCH/DELETE /api/users/:id` | admin | Khoá, đổi vai trò, xoá mềm | users | chưa có |
 | 7 | `POST /api/users/import` | admin | Nhập Excel tài khoản | users | chưa có |
-| 8 | `GET/POST /api/students` | staff, admin | Quản lý học viên | students | chưa có |
-| 9 | `GET /api/students/:id` | student(đúng người), staff, admin | Hồ sơ học viên | students | chưa có |
+| 8 | `GET/POST /api/students` | staff, admin | Quản lý học viên | students | **đã có (P2)** |
+| 9 | `GET /api/students/:id` | student(đúng người), staff, admin | Hồ sơ học viên | students | **đã có (P2, staff+admin)** |
 | 10 | `GET/POST /api/teachers` | admin | Quản lý giáo viên | teachers | chưa có |
 | 11 | `GET/POST /api/staff` | admin | Quản lý nhân viên | staff | chưa có |
 | 12 | `GET/POST /api/courses` | admin | Khóa học | courses | chưa có |
@@ -49,7 +49,7 @@
 | 14 | `GET/POST /api/rooms` | admin | Phòng học | rooms | chưa có |
 | 15 | `GET/POST /api/timetable` | staff, admin | Thời khóa biểu (kiểm tra trùng phòng/GV) | timetable | chưa có |
 | 16 | `GET/POST /api/class-sessions` | teacher, admin | Buổi học, điểm danh | sessions | chưa có |
-| 17 | `POST /api/attendances` | teacher, admin | Điểm danh | sessions | chưa có |
+| 17 | `POST /api/attendances` | teacher, admin | Điểm danh | sessions | **đã có (P2, khác path — xem 1c)** |
 | 18 | `GET/POST /api/invoices` | staff, admin | Khoản phải thu, công nợ | tuition | chưa có |
 | 19 | `POST /api/payments` | staff, admin | Thu học phí | tuition | chưa có |
 | 20 | `POST /api/receipts/close-of-day` | staff, admin | Đối soát cuối ngày | tuition | chưa có |
@@ -59,7 +59,7 @@
 | 24 | `GET/POST /api/tests`, `/api/scores` | teacher, admin | Nhập điểm | grades | chưa có |
 | 25 | `GET/POST /api/assignments` | teacher, admin | Giao bài tập | assignments | chưa có |
 | 26 | `GET/POST /api/posts` | staff, admin | Nội dung website | content | chưa có |
-| 27 | `GET/POST /api/leads` | staff | Khách tiềm năng | leads | chưa có |
+| 27 | `GET/POST /api/leads` | staff | Khách tiềm năng | leads | **đã có (P2, xem 1c)** |
 | 28 | `GET /api/dashboard`, `/api/reports/*` | admin | Dashboard, báo cáo | reports | chưa có |
 | 29 | `GET /api/audit-logs` | admin | Nhật ký thao tác | audit | chưa có |
 | 30 | `GET/PATCH /api/settings` | admin | Cài đặt | settings | chưa có |
@@ -96,6 +96,82 @@
 | 56 | `GET /api/reports/{revenue,enrollment,class-size,lead-source,funnel,debt-total,debt-aging,attendance}`, `GET /api/reports/export` | admin | Báo cáo | reports |
 | 57 | `GET /api/notifications` | mọi vai trò | Chuông thông báo | notifications |
 
+## 1c. Endpoint đã hiện thực ở P2 (xác minh bằng test và gọi tay)
+
+Đây là phần **đã chạy thật** trên PostgreSQL. Ví dụ gọi tay nằm trong `backend/requests/`.
+
+### POST /api/auth/login
+- Quyền: công khai (có `loginLimiter` 20 lần / 15 phút)
+- Body: `{ "username": string, "password": string }`
+- Thành công 200: `{ "data": { "user": { "id", "username", "fullName", "roles": string[] }, "mustChangePassword": boolean } }`
+  — **không** trả access token trong body; token nằm trong cookie `httpOnly`.
+- Cookie: `accessToken` (15 phút) + `refreshToken` (7 ngày), `sameSite: "lax"`, `secure` khi `NODE_ENV=production`.
+- Lỗi: 400 `VALIDATION_ERROR`, 401 `WRONG_CREDENTIALS`, 423 `LOCKED` (sau 5 lần sai), 429 `RATE_LIMITED`.
+- Quy tắc: so khớp dùng `argon2`; tài khoản `active/locked/archived` đều không đăng nhập được.
+- File: `backend/requests/auth.http`
+
+### POST /api/auth/refresh
+- Quyền: công khai (đọc cookie `refreshToken`)
+- Thành công 200: như trên + phát lại cả hai cookie.
+- Lỗi: 401 `UNAUTHENTICATED`.
+
+### POST /api/auth/logout
+- Quyền: mọi vai trò · Thành công 204 · Xoá cả hai cookie.
+
+### GET /api/auth/me
+- Quyền: mọi vai trò (`authenticate`)
+- Thành công 200: `{ "data": { "id", "username", "email", "fullName", "roles": string[] } }`
+- Lỗi: 401 `UNAUTHENTICATED`.
+
+### POST /api/auth/change-password
+- Quyền: mọi vai trò · Body: `{ "currentPassword", "newPassword" }`
+- Thành công 200: `{ "data": { "changed": true } }` + ghi `audit_logs` (`change_password`).
+- Lỗi: 400 `VALIDATION_ERROR`, 401 `WRONG_CREDENTIALS`, 423 `LOCKED`.
+- Quy tắc: tự xoá cờ `mustChangePassword`; sau đó các phiên cũ không còn dùng được (đổi `tokenVersion`).
+
+### GET /api/students · POST /api/students
+- Quyền: `requireRole('admin','staff')`
+- Lọc: `?search=&status=STUDYING|FROZEN|DROPPED|GRADUATED&page=&pageSize=` (mặc định 20, tối đa 100)
+- Body tạo mới: `{ "fullName", "dob"?, "gender"?, "phone"?, "email"?, "address"?, "note"? }` — mã học viên **sinh tự động**.
+- Thành công: 200 `{ "data": { "items", "page", "pageSize", "total", "totalPages" } }` / 201 `{ "data": {...} }`
+- Lỗi: 400 `VALIDATION_ERROR` (kèm `details`), 403 `FORBIDDEN`.
+- Quy tắc: mỗi lần tạo/sửa đều ghi `audit_logs`; số điện thoại phải khớp `0\d{9}`.
+- File: `backend/requests/students.http`
+
+### GET/PATCH/DELETE /api/students/:id
+- Quyền: `staff`, `admin`; **`DELETE` chỉ `admin`**.
+- Quy tắc: xoá là **xoá mềm** (`deleted_at`); đọc bản ghi đã xoá trả 404; danh sách mặc định không trả bản ghi đã xoá.
+
+### GET/PUT /api/attendance/sessions/:sessionId
+- Quyền: `teacher`, `staff`, `admin`. Giáo viên chỉ được chạm lớp **mình phụ trách** (kiểm tra ở service, không chỉ `requireRole`).
+- Body `PUT`: `{ "records": [{ "studentId", "status": "PRESENT|LATE|ABSENT|EXCUSED", "note"? }] }`
+- Thành công: 200 `{ "data": { "sessionId", "records": [...] } }`
+- Lỗi: 400 `VALIDATION_ERROR` (học viên không thuộc lớp, lặp `studentId`, `records` rỗng, `status` sai),
+  403 `FORBIDDEN` (lớp của người khác), 404 `NOT_FOUND`, 423 `LOCKED` (buổi đã khoá; chỉ `admin` sửa được).
+- Quy tắc: ghi đè bản ghi đã có, không tạo bản ghi trùng; chạy trong một transaction; ghi `audit_logs`.
+- File: `backend/requests/attendance.http`
+
+### POST /api/public/leads
+- Quyền: công khai, có `publicFormLimiter`.
+- Body: `{ "fullName", "phone", "email"?, "interestedCourse"?, "message"?, "website"? }`
+- Thành công 201: `{ "data": { "id", "status": "NEW" } }`
+- Lỗi: 400 `VALIDATION_ERROR`, 429 `RATE_LIMITED`.
+- Quy tắc: trường ẩn `website` có giá trị (bot) vẫn trả 201 nhưng **không** ghi bản ghi.
+- File: `backend/requests/leads.http`
+
+### GET /api/leads · PATCH /api/leads/:id
+- Quyền: `staff`, `admin`.
+- Lọc: `?status=NEW|CONTACTED|TRIAL|WON|LOST&page=&pageSize=`
+- Body `PATCH`: `{ "status"?, "note"? }`
+- Lỗi: 400 `VALIDATION_ERROR`, 403 `FORBIDDEN`, 404 `NOT_FOUND`.
+
+### Điểm lệch với hợp đồng P1 (giữ nguyên hiện thực P2, xử lý ở P8/P9/P16)
+- Điểm danh: P1 dự kiến `PUT /api/classes/:classId/sessions/:sessionId/attendance`, P2 dùng
+  `PUT /api/attendance/sessions/:sessionId`. Sẽ chốt lại khi có module `classes` (P8).
+- Khách tiềm năng: P1 dự kiến `PATCH /api/leads/:id/stage` và `POST /api/leads`; P2 dùng `PATCH /api/leads/:id`
+  với `status`, và **không** có `POST /api/leads` (tạo chỉ qua form công khai). Sẽ chốt ở P16.
+- `GET /api/students/:id` hiện chỉ cho `staff`/`admin`; P1 còn cho học viên xem hồ sơ của chính mình — sẽ bổ sung ở P5/P7.
+
 ## 2. Mẫu mô tả endpoint
 
 ```md
@@ -121,3 +197,4 @@
 | --- | --- | --- | --- |
 | 2026-10-04 | — | Tạo khung tài liệu | P0 |
 | 2026-10-04 | toàn bộ | Bổ sung nhóm 31–57 theo kiểm kê màn hình; chốt quy ước `/api/me` và mã trạng thái (D-009, D-010, D-013) | P1 |
+| 2026-10-05 | auth, students, attendance, leads | Thêm mục **1c**: 14 endpoint đã hiện thực kèm body, mã lỗi và quy tắc; ghi nhận 3 điểm lệch với P1 | P2 |

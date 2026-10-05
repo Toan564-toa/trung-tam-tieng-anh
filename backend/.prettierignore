@@ -1,0 +1,9 @@
+dist
+node_modules
+coverage
+package-lock.json
+
+# Tài liệu và cấu hình hạ tầng: giữ nguyên định dạng sẵn có
+*.md
+*.yml
+*.yaml
