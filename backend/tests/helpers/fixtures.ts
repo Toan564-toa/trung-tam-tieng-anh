@@ -6,6 +6,14 @@ import { prisma } from '../../src/config/prisma';
 
 export const PASSWORD = 'MatKhauTest@123';
 
+// Mã khoá học trong test là chữ/số/gạch nối nên chuyển thẳng sang slug được.
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 let cachedApp: Express | null = null;
 
 // Một instance app cho cả bộ test (tạo lại sẽ tạo thêm middleware rate limit không cần thiết).
@@ -67,7 +75,7 @@ export async function createStaff(fullName = 'Nhân viên Một', staffCode = 'N
 
 export async function createCourse(code = 'GT-64') {
   return prisma.course.create({
-    data: { code, name: `Khóa ${code}`, level: 'Cơ bản', totalSessions: 64, sessionsPerWeek: 2 },
+    data: { code, slug: slugify(code), name: `Khóa ${code}`, level: 'Cơ bản', totalSessions: 64, sessionsPerWeek: 2 },
   });
 }
 
@@ -109,9 +117,28 @@ export async function createSession(
   });
 }
 
-export async function createStudent(fullName = 'Nguyễn Văn A', studentCode = 'HV260001') {
+export async function createStudent(fullName = 'Nguyễn Văn A', studentCode = 'HV260001', phone = '0912345678') {
   return prisma.student.create({
-    data: { fullName, studentCode, phone: '0912345678', email: `${studentCode.toLowerCase()}@test.vn` },
+    data: { fullName, studentCode, phone, email: `${studentCode.toLowerCase()}@test.vn` },
+  });
+}
+
+// Tạo học viên kèm tài khoản đăng nhập đã liên kết (để test IDOR và reset-password).
+export async function createStudentUser(
+  studentCode: string,
+  fullName: string,
+  username: string,
+) {
+  const user = await createUser('student', username);
+  const student = await prisma.student.create({
+    data: { userId: user.id, studentCode, fullName, phone: '0912345678' },
+  });
+  return { user, student };
+}
+
+export async function createGuardian(fullName = 'Phụ huynh Một', phone = '0900000000') {
+  return prisma.guardian.create({
+    data: { fullName, phone, email: `${phone}@test.vn` },
   });
 }
 
@@ -130,7 +157,13 @@ function setCookies(res: request.Response): string[] {
 
 // Lấy chuỗi cookie phiên đăng nhập để dùng cho các request sau.
 export async function loginAs(username: string, password = PASSWORD): Promise<string> {
-  const res = await request(app()).post('/api/auth/login').send({ username, password });
+  const user = await prisma.user.findFirst({
+    where: { username: { equals: username, mode: 'insensitive' } },
+    select: { roles: { select: { role: { select: { code: true } } } } },
+  });
+  const roleCodes = user?.roles.map(({ role }) => role.code) ?? [];
+  const portal = roleCodes.includes('admin') && roleCodes.every((role) => role === 'admin') ? 'admin' : 'client';
+  const res = await request(app()).post('/api/auth/login').send({ username, password, portal });
   if (res.status !== 200) throw new Error(`Đăng nhập ${username} thất bại: HTTP ${res.status}`);
 
   const pair = setCookies(res)

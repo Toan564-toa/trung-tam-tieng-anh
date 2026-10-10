@@ -10,6 +10,7 @@
 @adminPass = DoiMatKhauNay@123
 ### Sau khi đổi mật khẩu ở request cuối, cập nhật biến này
 @newPass = MatKhauMoi@123
+@portal = admin
 
 ### 1. Kiểm tra server và database
 GET {{baseUrl}}/health
@@ -31,7 +32,8 @@ Content-Type: application/json
 
 {
   "username": "{{adminUser}}",
-  "password": "{{adminPass}}"
+  "password": "{{adminPass}}",
+  "portal": "{{portal}}"
 }
 
 ### 4. Xem tài khoản đang đăng nhập (cần cookie access_token)
@@ -91,3 +93,35 @@ POST {{baseUrl}}/api/auth/logout
 
 ### 12. Sau khi đăng xuất, /me phải trả 401
 GET {{baseUrl}}/api/auth/me
+
+### 13. Đăng nhập portal admin bằng tài khoản không phải admin -> 403
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "staff01",
+  "password": "MatKhauTest@123",
+  "portal": "admin"
+}
+
+### 14. Quên mật khẩu (phản hồi không tiết lộ email có tồn tại)
+POST {{baseUrl}}/api/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "admin@example.test"
+}
+
+### 15. Đặt lại mật khẩu — lấy token qua SMTP; log development cố ý ẩn token
+POST {{baseUrl}}/api/auth/reset-password
+Content-Type: application/json
+
+{
+  "token": "DAN_TOKEN_NHAN_DUOC_VAO_DAY",
+  "newPassword": "MatKhauReset@123"
+}
+
+### 16. Refresh token cũ sau khi đã xoay -> 401 và thu hồi cả họ token
+### Lưu cookie refresh_token trước lần refresh; gửi lại cookie cũ sau khi refresh thành công.
+POST {{baseUrl}}/api/auth/refresh
+Cookie: refresh_token=REFRESH_TOKEN_CU

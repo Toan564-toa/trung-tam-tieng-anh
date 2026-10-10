@@ -18,11 +18,15 @@ describe('POST /api/auth/login', () => {
   it('đăng nhập đúng trả 200, đặt cookie httpOnly và vai trò', async () => {
     await createUser('admin', 'admin01');
 
-    const res = await request(app()).post('/api/auth/login').send({ username: 'admin01', password: PASSWORD });
+    const res = await request(app())
+      .post('/api/auth/login')
+      .send({ username: 'admin01', password: PASSWORD, portal: 'admin' });
 
     expect(res.status).toBe(200);
-    expect(res.body.data.username).toBe('admin01');
-    expect(res.body.data.roles).toContain('admin');
+    expect(res.body.data.user.username).toBe('admin01');
+    expect(res.body.data.user.roles).toContain('admin');
+    expect(res.body.data.user).not.toHaveProperty('passwordHash');
+    expect(res.body.data.user).not.toHaveProperty('accessToken');
 
     const cookies = cookiesOf(res);
     const access = cookies.find((c: string) => c.startsWith('access_token='));
@@ -59,7 +63,7 @@ describe('POST /api/auth/login', () => {
 
     for (let i = 1; i <= env.MAX_FAILED_LOGINS; i++) {
       const wrong = await request(app()).post('/api/auth/login').send({ username: 'admin01', password: 'SaiMatKhau' });
-      expect(wrong.status).toBe(401);
+      expect(wrong.status).toBe(i === env.MAX_FAILED_LOGINS ? 423 : 401);
     }
 
     const user = await prisma.user.findUniqueOrThrow({ where: { username: 'admin01' } });
@@ -76,15 +80,15 @@ describe('POST /api/auth/login', () => {
 
     const res = await request(app()).post('/api/auth/login').send({ username: 'admin01', password: PASSWORD });
 
-    expect(res.status).toBe(403);
-    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(res.status).toBe(423);
+    expect(res.body.error.code).toBe('LOCKED');
   });
 
   it('ghi lịch sử đăng nhập thành công và thất bại', async () => {
     await createUser('admin', 'admin01');
 
     await request(app()).post('/api/auth/login').send({ username: 'admin01', password: 'SaiMatKhau' });
-    await request(app()).post('/api/auth/login').send({ username: 'admin01', password: PASSWORD });
+    await request(app()).post('/api/auth/login').send({ username: 'admin01', password: PASSWORD, portal: 'admin' });
 
     const history = await prisma.loginHistory.findMany({ orderBy: { id: 'asc' } });
     expect(history).toHaveLength(2);
@@ -115,9 +119,13 @@ describe('GET /api/auth/me', () => {
     const res = await request(app()).get('/api/auth/me').set('Cookie', cookie);
 
     expect(res.status).toBe(200);
-    expect(res.body.data.username).toBe('gv01');
-    expect(res.body.data.roles).toEqual(['teacher']);
-    expect(res.body.data.teacher).not.toBeNull();
+    const me = await request(app()).get('/api/auth/me').set('Cookie', cookie);
+    expect(me.body.data.username).toBe('gv01');
+    expect(me.body.data.roles).toEqual(['teacher']);
+    expect(me.body.data.teacher).not.toBeNull();
+    expect(me.body.data).toMatchObject({ id: expect.any(String), name: 'Giáo viên A', role: 'teacher' });
+    expect(me.body.data).not.toHaveProperty('passwordHash');
+    expect(me.body.data).not.toHaveProperty('accessToken');
   });
 
   it('tài khoản bị khoá sau khi đã có cookie thì /me cũng bị chặn ngay', async () => {
@@ -182,7 +190,7 @@ describe('POST /api/auth/change-password', () => {
 
     const login = await request(app())
       .post('/api/auth/login')
-      .send({ username: 'admin01', password: 'MatKhauMoi@456' });
+      .send({ username: 'admin01', password: 'MatKhauMoi@456', portal: 'admin' });
     expect(login.status).toBe(200);
   });
 

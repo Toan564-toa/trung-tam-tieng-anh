@@ -33,36 +33,37 @@
 
 | # | Method + Path | Quyền | Màn hình dùng | Module | Trạng thái |
 | --- | --- | --- | --- | --- | --- |
-| 1 | `POST /api/auth/login` | công khai | Đăng nhập (4 vai trò) | auth | **đã có (P2)** |
-| 2 | `POST /api/auth/logout` | mọi vai trò | Menu người dùng | auth | **đã có (P2)** |
-| 3 | `POST /api/auth/change-password` | mọi vai trò | Đổi mật khẩu | auth | **đã có (P2)** |
-| 4 | `GET /api/auth/me` | mọi vai trò | Hồ sơ cá nhân | auth | **đã có (P2)** |
-| 5 | `GET/POST /api/users` | admin | Tài khoản & phân quyền | users | chưa có |
-| 6 | `PATCH/DELETE /api/users/:id` | admin | Khoá, đổi vai trò, xoá mềm | users | chưa có |
-| 7 | `POST /api/users/import` | admin | Nhập Excel tài khoản | users | chưa có |
-| 8 | `GET/POST /api/students` | staff, admin | Quản lý học viên | students | **đã có (P2)** |
-| 9 | `GET /api/students/:id` | student(đúng người), staff, admin | Hồ sơ học viên | students | **đã có (P2, staff+admin)** |
-| 10 | `GET/POST /api/teachers` | admin | Quản lý giáo viên | teachers | chưa có |
-| 11 | `GET/POST /api/staff` | admin | Quản lý nhân viên | staff | chưa có |
-| 12 | `GET/POST /api/courses` | admin | Khóa học | courses | chưa có |
-| 13 | `GET/POST /api/classes` | staff, admin | Lớp học | classes | chưa có |
-| 14 | `GET/POST /api/rooms` | admin | Phòng học | rooms | chưa có |
-| 15 | `GET/POST /api/timetable` | staff, admin | Thời khóa biểu (kiểm tra trùng phòng/GV) | timetable | chưa có |
-| 16 | `GET/POST /api/class-sessions` | teacher, admin | Buổi học, điểm danh | sessions | chưa có |
-| 17 | `POST /api/attendances` | teacher, admin | Điểm danh | sessions | **đã có (P2, khác path — xem 1c)** |
-| 18 | `GET/POST /api/invoices` | staff, admin | Khoản phải thu, công nợ | tuition | chưa có |
-| 19 | `POST /api/payments` | staff, admin | Thu học phí | tuition | chưa có |
-| 20 | `POST /api/receipts/close-of-day` | staff, admin | Đối soát cuối ngày | tuition | chưa có |
-| 21 | `POST /api/discount-requests/:id/approve` | admin | Duyệt giảm giá/hoàn phí | tuition | chưa có |
-| 22 | `GET/POST /api/pay-rolls` | admin | Bảng lương + chốt lương | payroll | chưa có |
-| 23 | `GET/POST /api/events` | staff, admin | Lịch trình | events | chưa có |
-| 24 | `GET/POST /api/tests`, `/api/scores` | teacher, admin | Nhập điểm | grades | chưa có |
-| 25 | `GET/POST /api/assignments` | teacher, admin | Giao bài tập | assignments | chưa có |
-| 26 | `GET/POST /api/posts` | staff, admin | Nội dung website | content | chưa có |
-| 27 | `GET/POST /api/leads` | staff | Khách tiềm năng | leads | **đã có (P2, xem 1c)** |
-| 28 | `GET /api/dashboard`, `/api/reports/*` | admin | Dashboard, báo cáo | reports | chưa có |
-| 29 | `GET /api/audit-logs` | admin | Nhật ký thao tác | audit | chưa có |
-| 30 | `GET/PATCH /api/settings` | admin | Cài đặt | settings | chưa có |
+| 1 | `POST /api/auth/login`, `/refresh`, `/logout` | công khai | Đăng nhập (4 vai trò) | auth | **đã có (P4)** |
+| 2 | `POST /api/auth/change-password`, `/forgot-password`, `/reset-password` | mọi vai trò / công khai | Đổi/quên mật khẩu | auth | **đã có (P4)** |
+| 3 | `GET /api/auth/me` | mọi vai trò | Hồ sơ cá nhân | auth | **đã có (P4)** |
+| 4 | `GET/POST /api/users` | admin | Tài khoản & phân quyền | accounts | **đã có (P4)** |
+| 5 | `PATCH /api/users/:id`, `PATCH /api/users/:id/status` | admin | Sửa, gán/gỡ vai trò, khóa/mở | accounts | **đã có (P4)** |
+| 6 | `POST /api/users/:id/reset-password`, `GET /api/users/:id/login-history` | admin | Đặt lại mật khẩu, lịch sử đăng nhập | accounts | **đã có (P4)** |
+| 7 | `DELETE /api/users/:id`, `PATCH /api/users/:id/restore` | admin | Xóa mềm/khôi phục tài khoản | accounts | **đã có (P4)** |
+| 8 | `POST /api/users/import` | admin | Nhập Excel tài khoản | users | chưa có |
+| 9 | `GET/POST /api/students` | staff, admin | Quản lý học viên | students | **đã có (P2)** |
+| 10 | `GET /api/students/:id` | student(đúng người), staff, admin | Hồ sơ học viên | students | **đã có (P2, staff+admin)** |
+| 11 | `GET/POST /api/teachers` | admin | Quản lý giáo viên | teachers | chưa có |
+| 12 | `GET/POST /api/staff` | admin | Quản lý nhân viên | staff | chưa có |
+| 13 | `GET/POST /api/courses` | admin | Khóa học | courses | chưa có |
+| 14 | `GET/POST /api/classes` | staff, admin | Lớp học | classes | chưa có |
+| 15 | `GET/POST /api/rooms` | admin | Phòng học | rooms | chưa có |
+| 16 | `GET/POST /api/timetable` | staff, admin | Thời khóa biểu (kiểm tra trùng phòng/GV) | timetable | chưa có |
+| 17 | `GET/POST /api/class-sessions` | teacher, admin | Buổi học, điểm danh | sessions | chưa có |
+| 18 | `POST /api/attendances` | teacher, admin | Điểm danh | sessions | **đã có (P2, khác path — xem 1c)** |
+| 19 | `GET/POST /api/invoices` | staff, admin | Khoản phải thu, công nợ | tuition | chưa có |
+| 20 | `POST /api/payments` | staff, admin | Thu học phí | tuition | chưa có |
+| 21 | `POST /api/receipts/close-of-day` | staff, admin | Đối soát cuối ngày | tuition | chưa có |
+| 22 | `POST /api/discount-requests/:id/approve` | admin | Duyệt giảm giá/hoàn phí | tuition | chưa có |
+| 23 | `GET/POST /api/pay-rolls` | admin | Bảng lương + chốt lương | payroll | chưa có |
+| 24 | `GET/POST /api/events` | staff, admin | Lịch trình | events | chưa có |
+| 25 | `GET/POST /api/tests`, `/api/scores` | teacher, admin | Nhập điểm | grades | chưa có |
+| 26 | `GET/POST /api/assignments` | teacher, admin | Giao bài tập | assignments | chưa có |
+| 27 | `GET/POST /api/posts` | staff, admin | Nội dung website | content | chưa có |
+| 28 | `GET/POST /api/leads` | staff | Khách tiềm năng | leads | **đã có (P2, xem 1c)** |
+| 29 | `GET /api/dashboard`, `/api/reports/*` | admin | Dashboard, báo cáo | reports | chưa có |
+| 30 | `GET /api/audit-logs` | admin | Nhật ký thao tác | audit | chưa có |
+| 31 | `GET/PATCH /api/settings` | admin | Cài đặt | settings | chưa có |
 
 ## 1b. Nhóm bổ sung sinh ra ở P1 (xem FRONTEND-CONTRACT.md phần C để có đầy đủ tham số)
 
@@ -96,40 +97,100 @@
 | 56 | `GET /api/reports/{revenue,enrollment,class-size,lead-source,funnel,debt-total,debt-aging,attendance}`, `GET /api/reports/export` | admin | Báo cáo | reports |
 | 57 | `GET /api/notifications` | mọi vai trò | Chuông thông báo | notifications |
 
-## 1c. Endpoint đã hiện thực ở P2 (xác minh bằng test và gọi tay)
+## 1c. Endpoint đã hiện thực ở P2/P4 (xác minh bằng test)
 
 Đây là phần **đã chạy thật** trên PostgreSQL. Ví dụ gọi tay nằm trong `backend/requests/`.
 
 ### POST /api/auth/login
-- Quyền: công khai (có `loginLimiter` 20 lần / 15 phút)
-- Body: `{ "username": string, "password": string }`
-- Thành công 200: `{ "data": { "id", "username", "roles": string[], "mustChangePassword": boolean } }`
-  — **không** trả access token trong body; token nằm trong cookie `httpOnly`.
+- Quyền: công khai (có `loginLimiter` 20 lần / 15 phút).
+- Body: `{ "username": string, "password": string, "portal": "client" | "admin" }` (`portal` mặc định `client`).
+- Thành công 200: `{ "data": { "user": { "id": string, "username", "name", "email", "phone", "status", "role", "roles", "mustChangePassword" } } }`.
+- Không trả token hoặc `passwordHash` trong body; token nằm trong cookie `httpOnly`.
+- Portal `admin` chỉ nhận tài khoản có vai trò admin; portal `client` từ chối tài khoản chỉ có vai trò admin.
 - Cookie: `access_token` (15 phút) + `refresh_token` (7 ngày), `sameSite: "lax"`, `secure` khi `NODE_ENV=production`.
-- Lỗi: 400 `VALIDATION_ERROR`, 401 `WRONG_CREDENTIALS`, 423 `LOCKED` (sau 5 lần sai), 429 `RATE_LIMITED`.
-- Quy tắc: so khớp dùng `argon2`; tài khoản `active/locked/archived` đều không đăng nhập được.
+- Lỗi: 400 `VALIDATION_ERROR`, 401 `UNAUTHORIZED`, 403 `FORBIDDEN`, 423 `LOCKED`, 429 `TOO_MANY_REQUESTS`.
+- Sai mật khẩu lần thứ 5 khóa tạm tài khoản và vô hiệu hóa phiên hiện tại.
 - File: `backend/requests/auth.http`
 
+Ví dụ request:
+
+```http
+POST /api/auth/login
+Content-Type: application/json
+
+{"username":"admin","password":"<mật khẩu>","portal":"admin"}
+```
+
+Ví dụ response 200 (token chỉ có trong `Set-Cookie` httpOnly):
+
+```json
+{"data":{"user":{"id":"1","username":"admin","name":"admin","email":"","phone":null,"status":"active","role":"admin","roles":["admin"],"mustChangePassword":true}}}
+```
+
 ### POST /api/auth/refresh
-- Quyền: công khai (đọc cookie `refresh_token`)
-- Thành công 200: như trên + phát lại cả hai cookie.
-- Lỗi: 401 `UNAUTHENTICATED`.
+- Quyền: công khai (đọc cookie `refresh_token`); thành công 200 phát lại hai cookie.
+- Refresh token có `jti`; database lưu Argon2id hash, `tokenId`, thời hạn và liên kết cha. Mỗi lần refresh, server xác minh hash, thu hồi token cũ và tạo token con trong một transaction.
+- Dùng lại token đã thu hồi sẽ thu hồi cả họ token rồi trả 401. Token hết hạn, không tồn tại hoặc hash không khớp cũng trả 401.
+- File: `backend/requests/auth.http`
 
 ### POST /api/auth/logout
-- Quyền: mọi vai trò · Thành công 200 `{ "data": { "ok": true } }` · Xoá cả hai cookie.
+- Quyền: công khai; nếu cookie refresh hợp lệ thì thu hồi refresh token đó. Thành công 200 `{ "data": { "ok": true } }`; luôn xóa hai cookie.
 
 ### GET /api/auth/me
 - Quyền: mọi vai trò (`authenticate`)
 - Thành công 200:
-  `{ "data": { "id", "username", "email", "phone", "mustChangePassword", "lastLoginAt", "roles": string[], "teacher", "staff", "student" } }`
-  — `teacher`/`staff`/`student` là hồ sơ theo vai trò hoặc `null`.
+  `{ "data": { "id": string, "username", "name", "email", "phone", "status", "role", "roles", "branchId", "mustChangePassword", "lastLoginAt", "teacher", "staff", "student" } }`.
+  `name` lấy từ hồ sơ liên kết hoặc tên tài khoản; không trả `passwordHash`, cookie hay token.
 - Lỗi: 401 `UNAUTHENTICATED`.
 
 ### POST /api/auth/change-password
 - Quyền: mọi vai trò · Body: `{ "currentPassword", "newPassword" }`
 - Thành công 200: `{ "data": { "ok": true } }` + ghi `audit_logs` (`change_password`).
-- Lỗi: 400 `VALIDATION_ERROR`, 401 `WRONG_CREDENTIALS`, 423 `LOCKED`.
-- Quy tắc: tự xoá cờ `mustChangePassword`; sau đó các phiên cũ không còn dùng được (đổi `tokenVersion`).
+- Lỗi: 400 `VALIDATION_ERROR` hoặc `BAD_REQUEST`, 401 `UNAUTHORIZED`.
+- Quy tắc: tự xoá cờ `mustChangePassword`, tăng `tokenVersion` và thu hồi mọi refresh token. Các access token cũ bị từ chối.
+- Khi `mustChangePassword=true`, API cần đăng nhập khác ngoài `/api/auth/me`, `/api/auth/change-password`, `/api/auth/logout` trả 403 `PASSWORD_CHANGE_REQUIRED`.
+
+### POST /api/auth/forgot-password · POST /api/auth/reset-password
+- `forgot-password`: body `{ "email": string }`; luôn trả 200 `{ "data": { "message": "Nếu email tồn tại, hướng dẫn đặt lại mật khẩu sẽ được gửi." } }`, kể cả email không có trong hệ thống. Giới hạn 5 lần/giờ.
+- Nếu tài khoản tồn tại, gửi liên kết reset qua SMTP; token ngẫu nhiên chỉ lưu SHA-256 hash, dùng một lần và hết hạn sau 20 phút. Development ghi thông báo email với token đã ẩn.
+- `reset-password`: body `{ "token": string, "newPassword": string }`; 200 `{ "data": { "ok": true } }`; token sai/hết hạn/đã dùng trả 400. Thu hồi mọi refresh token và access token cũ, ghi audit.
+
+Ví dụ quên mật khẩu:
+
+```http
+POST /api/auth/forgot-password
+Content-Type: application/json
+
+{"email":"nguoi-dung@example.test"}
+```
+
+```json
+{"data":{"message":"Nếu email tồn tại, hướng dẫn đặt lại mật khẩu sẽ được gửi."}}
+```
+
+### Tài khoản quản trị `/api/users`
+- Mọi endpoint yêu cầu cookie đăng nhập và vai trò `admin`; vai trò khác nhận 403.
+- `GET /api/users?role=&status=&query=&onlyDeleted=false&page=1&pageSize=20`: lọc vai trò, trạng thái (`active|locked|pending|archived`), tìm username/tên/email/điện thoại và phân trang ổn định. DTO gồm `id, username, fullName, email, phone, role, roles, status, lastLoginAt, createdAt, deletedAt, mustChangePassword`.
+- `POST /api/users`: body `{ "username", "fullName", "email"?, "phone"?, "roles": string[] }`; trả 201 DTO và `temporaryPassword` đúng một lần. Database chỉ lưu Argon2 hash; audit không lưu mật khẩu.
+- `PATCH /api/users/:id`: cập nhật `fullName/email/phone/roles`; gửi `roles` thay thế toàn bộ tập vai trò. Ghi audit. Admin không thể tự gỡ vai trò admin.
+- `PATCH /api/users/:id/status`: body `{ "status": "active" | "locked" }`; khóa thu hồi refresh token và vô hiệu hóa access token. Admin không thể tự khóa.
+- `POST /api/users/:id/reset-password`: trả `{ "data": { "temporaryPassword": string } }` một lần, đặt `mustChangePassword=true`, thu hồi phiên và ghi audit.
+- `GET /api/users/:id/login-history?page=1&pageSize=20`: danh sách đăng nhập phân trang.
+- `DELETE /api/users/:id`: xóa mềm, thu hồi phiên và ghi audit; admin không thể tự xóa. `PATCH /api/users/:id/restore` khôi phục và ghi audit.
+- File gọi thử: `backend/requests/accounts.http`.
+
+Ví dụ tạo tài khoản:
+
+```http
+POST /api/users
+Content-Type: application/json
+
+{"username":"hv001","fullName":"Nguyễn An","email":"an@example.test","roles":["student"]}
+```
+
+```json
+{"data":{"id":2,"username":"hv001","fullName":"Nguyễn An","email":"an@example.test","phone":null,"role":"student","roles":["student"],"status":"active","mustChangePassword":true,"temporaryPassword":"<chỉ hiển thị một lần>"}}
+```
 
 ### GET /api/students · POST /api/students
 - Quyền: `requireRole('admin','staff')`

@@ -287,3 +287,91 @@ nếu quyết định cũ sai thì thêm quyết định mới ghi "thay thế D
   - `errorHandler` đã sẵn sàng dịch lỗi `P2002` thành 409 nên khi nào siết `student_code` cũng không cần sửa thêm.
 - Test đã sửa cho khớp: `tests/students.test.ts` kiểm tra email trùng vẫn tạo được (201) và mã học viên
   sinh ra khác.
+
+---
+
+## D-022: Xóa migration cũ, tạo lại `init` một lần duy nhất ở P3 [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-06, P3
+- Bối cảnh: migration P2 (`20261005064713_init`, `20261005070000_add_unaccent`, `20261005090000_init`, `20261005091000_constraints`) được tạo lẻ từng lần khi schema thay đổi. Hiện tại schema đã đủ đầy (thêm `score_changes`, nhiều cột/cột mới), cần một migration gốc sạch làm nền tảng bền vững cho các phase sau.
+- Đã chọn: **xoá toàn bộ migration cũ** và chạy `prisma migrate dev --name init` từ schema hiện tại → tạo `20261006021914_init`. Sau đó tạo migration `20261006022131_constraints` chứa toàn bộ ràng buộc SQL (CHECK, unique có điều kiện, trigger append-only, views). Từ sau phase này **tuyệt đối không sửa** migration đã áp dụng.
+- Hệ quả:
+  - Mọi máy phát triển/test đều dựng từ cùng một migration duy nhất.
+  - `prisma migrate reset` an toàn vì chưa có dữ liệu thật.
+  - Database test tạo lại sạch sẽ trước mỗi `npm test`.
+
+---
+
+## D-023: Thêm bảng `score_changes` (P3 theo đặc tả, nhưng người dùng yêu cầu ở P3) [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-06, P3
+- Bối cảnh: đặc tả liệt kê `score_changes` là P3, nhưng yêu cầu phase này yêu cầu thêm tất cả bảng P1/P2 còn thiếu. Người dùng có nhu cầu theo dõi lịch sử sửa điểm.
+- Đã chọn: **thêm `score_changes` vào schema P3** vì đây là bảng nhật ký (chỉ thêm) và phục vụ quy tắc nghiệp vụ "ghi audit_logs cho điểm". Cũng thêm trigger `scores_append_only` để điểm chỉ sửa bằng cách thêm dòng vào `score_changes`.
+- Hệ quả: Giáo viên không sửa trực tiếp `scores`; mọi thay đổi phải tạo `ScoreChange` tương ứng.
+
+---
+
+## D-024: Seed demo lấy trực tiếp từ dữ liệu giả của frontend [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-06, P3
+- Bối cảnh: yêu cầu phase này yêu cầu seed dựa trên mock frontend. File `backend/prisma/demo-data.ts` đã chứa dữ liệu giả phù hợp với `frontend/src/data/*.ts`.
+- Đã chọn: **giữ nguyên `demo-data.ts`** vì dữ liệu đã bám sát mock frontend và đủ lớn để kiểm ch tra các màn hình. Cờ `--demo` trong `prisma/seed.ts` chỉ chạy `seedDemo` và in mật khẩu demo một lần.
+- Hệ quả: `npm run db:seed -- --demo` tạo dữ liệu demo đầy đủ; `npm run db:seed` (không có `--demo`) chỉ tạo vai trò + admin + 1 khóa học mẫu.
+
+## D-025: Refresh token rotation với phát hiện reuse + bảng `refresh_tokens` [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-07, P4
+- Bối cảnh: JWT access token ngắn (15 phút) cần refresh an toàn; phải phát hiện token bị ăn cắp (reuse).
+- Đã chọn: bảng `refresh_tokens` lưu hash (argon2id) của refresh token, có `parentRefreshTokenId` để truy vết chain. Mỗi lần refresh:
+  1. Tìm bản ghi khớp userId + token hash.
+  2. Nếu tìm thấy → vô hiệu hóa cũ, tạo mới ghi `parentRefreshTokenId`.
+  3. Trả 401 nếu token **đã dùng rồi** (reuse, nghi ngờ bị đánh cắp) hoặc hết hạn.
+- Hàm: `hashRefreshToken()` / `verifyRefreshTokenHash()` trong `tokens.ts`.
+- Hệ quả: migration `20261007013709_add_refresh_token_parent`; `npm run check` xanh (sau sửa httpError.ts).
+
+## D-026: `mustChangePassword` flag cho tài khoản seed demo [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-07, P4
+- Bối cảnh: tài khoản admin seed demo cần bắt đổi mật khẩu lần đầu.
+- Đã chọn: cờ `mustChangePassword` trên `users` (boolean). Login trả `mustChangePassword` trong body; controller/frontend bắt đổi mật khẩu trước khi dùng API khác.
+- Hệ quả: login response chứa trường `mustChangePassword`; seed demo đặt `mustChangePassword = true` cho admin.
+
+## D-027: Truyền `portal` trong body đăng nhập [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-07, P4
+- Bối cảnh: frontend cần phân biệt portal (học viên/giáo viên/nhân viên) để tạo refresh token phù hợp.
+- Đã chọn theo yêu cầu P4: login nhận `portal: "client" | "admin"` trong JSON body; portal admin yêu cầu tài khoản có role `admin`. Refresh token không mang portal.
+- Không dùng portal trong cookie vì cookie là credential phiên; scope đăng nhập cần được kiểm tra khi xác thực thông tin đăng nhập.
+
+## D-028: Hợp đồng xác thực và quản lý tài khoản P4 [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-07, P4.
+- Chốt theo yêu cầu P4: `POST /api/auth/login` nhận `portal: client|admin`; portal admin yêu cầu vai trò admin, portal client từ chối tài khoản chỉ có admin. Login và `/api/auth/me` trả `data.user` theo `AuthUser` thật của frontend (`id` dạng chuỗi, `username`, `name`, `email`, `role`, `mustChangePassword`).
+- Refresh token là JWT có `jti`, DB lưu Argon2id hash theo `tokenId`; refresh xoay trong transaction. Dùng lại token bị thu hồi làm thu hồi cả họ token. Đổi mật khẩu, reset, khóa và xóa tài khoản thu hồi phiên; `tokenVersion` chặn access token cũ.
+- Tài khoản có `mustChangePassword` chỉ gọi được `/api/auth/me`, `/api/auth/change-password`, `/api/auth/logout`; API nội bộ còn lại trả 403 `PASSWORD_CHANGE_REQUIRED`.
+- Username được so sánh không phân biệt hoa thường như hợp đồng frontend; DB có unique index trên `lower(username)`.
+
+## D-029: Gửi email đặt lại mật khẩu [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-07, P4.
+- Dùng nodemailer qua SMTP (`SMTP_*`). Môi trường phát triển không cần SMTP: logger in nội dung email mẫu nhưng ẩn recipient và reset token, tuân thủ quy tắc không ghi dữ liệu cá nhân/token vào log. Muốn nhận link thật cần cấu hình SMTP trong `.env`.
+- Token reset tạo ngẫu nhiên 256-bit, chỉ lưu SHA-256 hash, hết hạn 20 phút và chỉ dùng một lần. Phản hồi API luôn giống nhau cho email tồn tại/không tồn tại.
+- Lý do thêm thư viện: nodemailer là yêu cầu cụ thể của P4 và là thư viện SMTP phổ biến; không có sẵn trong backend.
+
+## D-030: Phân quyền theo dữ liệu cho giáo viên và nhân viên (P5) [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-09, P5.
+- Giáo viên chỉ xem được học viên thuộc lớp mình phụ trách (chính qua `classes.teacher_id`, phụ qua `class_teachers`); danh sách giáo viên chỉ trả lớp mình, không trả `identityNo`. Nhân viên thường không xem danh sách nhân viên (admin-only); chỉ sửa được hồ sơ mình và chỉ khi là advisor của học viên đó. Kiểm tra ở backend, không dựa vào ẩn menu frontend.
+
+## D-031: Upload tệp — kiểm tra MIME bằng magic-byte, lưu local qua interface [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-09, P5.
+- Multer dùng memoryStorage, giới hạn 5 MB (`FILE_MAX_SIZE_MB`). Kiểu MIME xác định bằng magic-byte (`fileType.ts`), không tin `Content-Type` từ client. Lưu qua `FileStorage` interface với `LocalFileStorage` mặc định (`FILE_STORAGE_DIR=storage/uploads`), đổi tên file để tránh trùng, không thực thi file tải lên. Sẵn sàng thêm S3 bằng cách cài interface khác.
+- Lý do: tuân thủ quy tắc bảo mật upload (kiểm tra theo nội dung, giới hạn dung lượng, đổi tên, không thực thi).
+
+## D-032: Xuất Excel phía server (P5) [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-09, P5.
+- Dùng exceljs tạo buffer xlsx trong memory, trả kèm `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` và `Content-Disposition: attachment`. Cột và thứ tự theo hợp đồng frontend. Phân trang/xuất client chuyển sang server (lệch F5/F6).
+- Lý do thêm thư viện: exceljs là thư viện xlsx phổ biến, tạo file Excel phía server theo yêu cầu xuất danh sách.
+
+## D-033: `teachers.userId`/`staff.userId` nullable + unique (P5) [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-09, P5.
+- Giáo viên/nhân viên có thể chưa có tài khoản đăng nhập (tạo hồ sơ trước, gắn tài khoản sau). `userId` nullable và unique (mỗi tài khoản gắn tối đa một giáo viên/nhân viên). Migration `20261007130000_optional_user_link`.
+
+## D-034: Mật khẩu tạm một lần khi tạo kèm tài khoản (P5) [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-09, P5.
+- Tạo giáo viên/nhân viên kèm tài khoản: sinh mật khẩu tạm, trả một lần trong phản hồi, đặt `mustChangePassword=true`, không lưu dạng rõ. Tạo không kèm tài khoản: `hasAccount=false`, không trả `temporaryPassword` (null).
+
+## D-035: Tìm kiếm tiếng Việt dùng `ttnn_unaccent(lower(...))` (P5) [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-09, P5.
+- Pattern chuẩn cho mọi tìm kiếm không dấu: `ttnn_unaccent(lower(concat_ws(' ', <cột>))) LIKE '%' || ttnn_unaccent(lower(<từ khoá>)) || '%'`. `lower()` trả `text` nên chỉ cần overload `text` của `ttnn_unaccent`. Sửa lỗi chính tả `tnnn_unaccent` (3 chữ n) gây lỗi 42883 ở `students.service.ts`.

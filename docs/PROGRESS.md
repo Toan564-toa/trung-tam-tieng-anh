@@ -1,21 +1,23 @@
 # Tiến độ dự án
 
 ## Trạng thái hiện tại
-- Phase đang làm: **P2 — Kiểm chứng khung backend** (xong: typecheck, lint, test, build, server thật đều xanh)
-- Phase tiếp theo: **P3 — Schema đầy đủ và dữ liệu mẫu**
+- Phase đã hoàn thành: **P4 — Đăng nhập và quản lý tài khoản (BE)** (2026-10-07) · **P5 — Hồ sơ người dùng và tệp (BE)** (2026-10-09)
+- Phase hiện tại: **P6 — Import Excel (BE)** (chưa bắt đầu)
 - Lệnh chạy dự án: `npm run dev:fe` (frontend) · `npm run dev:be` (backend, `http://localhost:4000`)
-- Cập nhật lần cuối: 2026-10-05, phiên 3 (P2 xong)
-- Chi tiết P2: `backend/README.md`, `docs/DECISIONS.md` D-014…D-021
+- Cập nhật lần cuối: 2026-10-09, phiên 7 (P5 hoàn tất; backend 11 file test, 188/188 test xanh)
+- Chi tiết P3: `docs/DECISIONS.md` D-022…D-024, `docs/DB.md`
+- Chi tiết P4: `docs/DECISIONS.md` D-025…D-029, `docs/API.md` phần Auth và tài khoản
+- Chi tiết P5: `docs/DECISIONS.md` D-030…D-035, `docs/API.md` phần hồ sơ, tệp, giáo viên, nhân viên
 
 ## Danh sách phase
 ### Chuẩn bị
 - [x] P0 Khởi tạo repo và tài liệu
 - [x] P1 Kiểm kê frontend, lập hợp đồng dữ liệu
 - [ ] P2 Kiểm chứng khung backend — **đã xong 2026-10-05** (xem nhật ký phiên 3)
-- [ ] P3 Schema đầy đủ và dữ liệu mẫu
+- [x] P3 Schema đầy đủ và dữ liệu mẫu — **đã xong 2026-10-06** (xem nhật ký phiên 4)
 ### Mốc 1: Đăng nhập, tài khoản, hồ sơ, import
-- [ ] P4 Đăng nhập và quản lý tài khoản (BE)
-- [ ] P5 Hồ sơ người dùng và tệp (BE)
+- [x] P4 Đăng nhập và quản lý tài khoản (BE) — **xong 2026-10-07** (xem nhật ký phiên 6)
+- [x] P5 Hồ sơ người dùng và tệp (BE) — **xong 2026-10-09** (xem nhật ký phiên 7)
 - [ ] P6 Import Excel (BE)
 - [ ] P7 NỐI #1: đăng nhập, tài khoản, hồ sơ, import
 ### Mốc 2: Lớp học và điểm danh
@@ -54,6 +56,48 @@ Thứ tự này xuất ra từ ma trận quyền (`docs/PERMISSIONS.md`) và h�
 | 10 | `notifications, audit_logs, settings, sequences, files` + view báo cáo (P18) | Dashboard, báo cáo, cài đặt; `audit_logs` bắt buộc từ Mốc 1 |
 
 ## Nhật ký bàn giao (mới nhất ở trên)
+### Phiên 7: 2026-10-09 (P5 — hồ sơ người dùng và tệp; **xong**)
+- Đã làm trong backend:
+  - Module `me`: `GET /api/me/profile` (role + hồ sơ theo vai trò), `PATCH /api/me/profile` (sửa theo vai trò), `POST /api/me/change-password`.
+  - Module `files`: upload (multer memoryStorage, giới hạn 5 MB, kiểm tra MIME bằng magic-byte), lấy tệp riêng (chủ sở hữu/admin), lấy tệp công khai (ảnh giáo viên). Lưu local qua `FileStorage` interface, sẵn sàng đổi S3.
+  - Module `teachers`: danh sách phân trang/tìm không dấu/lọc trạng thái + showOnWebsite, tạo (có/không tài khoản, trả mật khẩu tạm một lần), sửa, đổi trạng thái, xóa mềm/khôi phục, đặt lại mật khẩu, xuất Excel. Phân quyền theo dữ liệu: giáo viên chỉ xem lớp mình phụ trách (chính/phụ), không thấy `identityNo`.
+  - Module `staff`: tương tự; danh sách admin-only; nhân viên chỉ sửa hồ sơ mình và chỉ khi được tư vấn (advisor).
+  - Sửa `students`: tìm kiếm dùng `ttnn_unaccent(lower(...))` (lỗi chính tả `tnnn_unaccent` gây 42883), thêm tìm theo số điện thoại.
+  - Utils: `env.ts`, `fileType.ts` (magic-byte), `excel.ts` (xuất xlsx), `httpError.ts`; middleware `upload.ts`.
+  - Migration `20261007130000_optional_user_link`: `teachers.userId`/`staff.userId` nullable + unique.
+  - Test mới: profiles (21), files (25), teachers (16), staff (10); sửa students (43).
+- Kiểm tra:
+  - Backend typecheck/lint/test/build đều xanh. `npm test`: **11 file, 188/188 test** (~50 phút do database cloud).
+  - Frontend không bị sửa (phase BACKEND).
+- Lỗi đã sửa trong phiên:
+  - `students.service.ts` dùng `tnnn_unaccent` (3 chữ n) thay vì `ttnn_unaccent` → lỗi 42883. Sửa thành `ttnn_unaccent(lower(...))` theo pattern đã chứng minh ở accounts/teachers.
+  - Test xuất Excel: superagent không có parser cho mime `spreadsheetml` nên `res.body` là object rỗng. Sửa test dùng `.buffer(true).parse(...)` đọc raw Buffer, kiểm tra magic byte PK.
+  - `profiles.test.ts`: biến `adminCookie` khai báo nhưng không dùng → lỗi lint. Đã xóa.
+- Còn dở / cần làm tiếp:
+  - P5 hoàn tất; phase kế tiếp là P6 — Import Excel (BE).
+  - Chưa commit (chờ người dùng xác nhận).
+
+### Phiên 6: 2026-10-07 (P4 — hoàn thiện auth và quản lý tài khoản; **xong**)
+- Đã làm trong backend:
+  - Bổ sung refresh JWT có `jti`; bảng `refresh_tokens` lưu hash Argon2id, token ID, thời hạn và quan hệ cha. Refresh xoay trong transaction; dùng lại token cũ thu hồi các token cùng họ.
+  - Đăng xuất, đổi mật khẩu, reset mật khẩu, khóa và xóa tài khoản thu hồi refresh token; `tokenVersion` vô hiệu hóa access token cũ.
+  - Login nhận `portal: client|admin`; kiểm tra portal admin và từ chối admin thuần ở portal client.
+  - Middleware chặn API nội bộ khi `mustChangePassword=true` bằng 403 `PASSWORD_CHANGE_REQUIRED`, ngoại trừ `/auth/me`, `/auth/change-password`, `/auth/logout`.
+  - Thêm quên/đặt lại mật khẩu: token SHA-256 một lần, hết hạn 20 phút, phản hồi chung, nodemailer SMTP; thêm cấu hình env.
+  - Thêm `/api/users`: danh sách lọc/phân trang, tạo, cập nhật thông tin và vai trò, khóa/mở, đặt mật khẩu tạm, lịch sử đăng nhập, xóa mềm/khôi phục. Audit cho thao tác ghi; chặn admin tự khóa, tự xóa, tự gỡ quyền admin.
+  - Cập nhật DTO login và `/auth/me` theo `AuthUser` frontend, không trả token/hash; thêm test auth và accounts, `backend/requests/accounts.http`, cập nhật API/decision.
+  - Migration mới `20261007120000_auth_hardening` thêm `users.full_name`, `users.token_version`, `refresh_tokens.token_id` và unique index username không phân biệt hoa thường.
+- Kiểm tra:
+  - `npm run check` **xanh**, exit code 0: backend typecheck/lint/test/build, frontend typecheck/lint/build; **7 file test backend, 95/95 test**.
+  - Test chạy khoảng 23 phút do dùng PostgreSQL từ xa. Global setup chỉ tạo lại database test `trung_tam_test`; migration auth đã được áp dụng và kiểm thử trên database test.
+  - `prisma validate`, backend typecheck/build/lint đều xanh. Không còn cảnh báo lint backend sau khi đổi thông báo ở `tmp-truncate.ts` sang `process.stdout.write`.
+  - Frontend không bị sửa. Frontend lint còn cảnh báo Fast Refresh; Vite cảnh báo chunk lớn. Frontend test script hiện in `CHƯA CẤU HÌNH test` nhưng trả mã thành công.
+- Còn dở / cần làm tiếp:
+  - P4 hoàn tất; phase kế tiếp là P5 — hồ sơ người dùng và tệp.
+  - Development email log in nội dung email mẫu nhưng ẩn địa chỉ và reset token để tuân thủ quy tắc bảo mật; muốn nhận link reset thật cần cấu hình SMTP. Đây là lựa chọn ở D-029.
+- Lệch hợp đồng:
+  - Tài liệu frontend cũ gọi trường phân biệt portal là `audience`; yêu cầu P4 mới chốt `portal`. Phase NỐI cần ánh xạ scope login hiện tại sang `portal` và không thay giao diện.
+
 ### Phiên 3: 2026-10-05 (P2 — kiểm chứng khung backend; **xong**)
 - Đã làm:
   - Mã nguồn khung backend đã có trong `backend/` (`src/`, `prisma/`, `package.json`, `tsconfig.json`,
@@ -104,6 +148,51 @@ Thứ tự này xuất ra từ ma trận quyền (`docs/PERMISSIONS.md`) và h�
   npm test
   npm run dev
   ```
+
+### Phiên 4: 2026-10-06 (P3 — schema đầy đủ và dữ liệu mẫu; xong)
+- Đã làm:
+  - **Sửa lỗi typecheck + lint** trong `prisma/demo-seed.ts` và `prisma/demo-data.ts` để `npm run check` xanh.
+  - **Thêm model `ScoreChange`** (lịch sử sửa điểm, P2 theo đặc tả, người dùng yêu cầu ở P3) + trigger `scores_append_only`.
+  - **Xóa migration cũ** (4 migration P2) và tạo lại `init` một lần duy nhất: `20261006021914_init`.
+  - **Tạo migration `20261006022131_constraints`** chứa toàn bộ ràng buộc SQL:
+    - CHECK: tiền > 0, sĩ số > 0, tổng buổi > 0, invoice total = subtotal − discount, ...
+    - UNIQUE CÓ ĐIỀU KIỆN: `enrollments` chỉ 1 ACTIVE/student+class
+    - Trigger append-only: `payments`, `scores`, `attendance_changes`, `score_changes`, `audit_logs`, `login_history`
+    - Views: `v_invoice_balance`, `v_enrollment_progress`
+    - Index tìm tiếng Việt không dấu (`ttnn_unaccent`) cho 5 bảng
+  - **Sửa demo-seed.ts**: thêm `ensureDemoUser()` dùng `upsert` để không đụng admin đã có; đổi `staff` map sang `{ staffId, userId }` để đúng FK `createdBy`/`collectedBy`/`authorId`.
+  - **Viết docs/DB.md**: sơ đồ Mermaid, quy ước, cách thêm migration, danh sách view.
+  - **Cập nhật docs/DECISIONS.md**: D-022 (xóa migration cũ), D-023 (thêm score_changes), D-024 (seed demo).
+  - **Thêm `tests/constraints.test.ts`**: 7 test kiểm tra trigger payments append-only, CHECK tiền > 0, enrollment ACTIVE trùng bị chặn, view công nợ và tiến độ đúng.
+  - **npm test** đã chạy: 6 file, 84 test, tất cả xanh (thêm 7 test ràng buộc).
+- Đang chờ:
+  - `seed --demo` đang chạy trên database cloud (chậm, mỗi query 1–3s).
+  - Chạy lại `npm run check` sau khi seed xong.
+- Việc phát sinh:
+  - `prisma migrate reset` trên Aiven không xoá hết dữ liệu (có thể do quyền hoặc extension); cần truncate thủ công nếu cần dựng lại hoàn toàn.
+  - Có thể cân nhắc dùng PostgreSQL local + `docker compose up -d` để seed nhanh trong môi trường phát triển.
+
+### Phiên 5: 2026-10-07 (P4 — khởi động đăng nhập và quản lý tài khoản; đã được phiên 6 cập nhật)
+- Đã làm:
+  - **Sửa lỗi httpError.ts**: xoá duplicate `passwordChangeRequired()` và fix indentation.
+  - **Cập nhật `tokens.ts`**: thêm `hashRefreshToken()` và `verifyRefreshTokenHash()` (argon2id).
+  - **Tạo migration `20261007013709_add_refresh_token_parent`**:
+    - Thêm `parentRefreshTokenId` vào `refresh_tokens`.
+    - Thêm self-relation `@relation("refreshChain")` cho truy vấn chain.
+    - Index `idx_parent_refresh_token_id`.
+- Trạng thái lúc cuối phiên: các hạng mục trên chưa hoàn thành; xem kết quả mới nhất ở Phiên 6.
+- Việc phát sinh:
+  - `npm run check` vẫn cảnh báo `tmp-truncate.ts:24:3: Unexpected console statement` (cảnh báo lint).
+  - `npm test` vẫn chậm do database cloud (mỗi request 1–3s).
+
+## Nhật ký bàn giao P4 (trạng thái cũ tại cuối phiên 5; được thay bằng Phiên 6)
+### Đã hoàn thành
+- Sửa lỗi httpError.ts (duplicate method) → typecheck xanh.
+- Cập nhật tokens.ts: hàm băm/xác minh refresh token.
+- Thêm migration `20261007013709_add_refresh_token_parent` (DB đã áp dụng).
+
+Chi tiết công việc hoàn tất và điểm còn chặn được ghi tại Phiên 6. Lệch portal `audience`/`portal` sẽ được ánh xạ ở phase NỐI.
+
 
 ### Phiên 2: 2026-10-04 (P1 — kiểm kê và hợp đồng dữ liệu)
 - Đã làm:

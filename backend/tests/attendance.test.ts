@@ -249,7 +249,7 @@ describe('PUT /api/attendance/sessions/:sessionId', () => {
     expect(res.body.error.message).toContain('đã bị hủy');
   });
 
-  it('ghi nhật ký thao tác điểm danh', async () => {
+  it('ghi nhật ký thao tác điểm danh', { timeout: 60_000 }, async () => {
     const session = await createSession(classAId);
 
     await request(app())

@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import argon2 from 'argon2';
 import { PrismaClient } from '@prisma/client';
+import { seedDemo } from './demo-seed';
 
 const prisma = new PrismaClient();
 
@@ -12,7 +13,9 @@ const ROLES = [
   { code: 'guardian', name: 'Phụ huynh' },
 ];
 
-async function main() {
+const isDemo = process.argv.includes('--demo');
+
+async function seedBase() {
   // 1. Vai trò
   for (const r of ROLES) {
     await prisma.role.upsert({ where: { code: r.code }, update: { name: r.name }, create: r });
@@ -47,6 +50,7 @@ async function main() {
     update: {},
     create: {
       code: 'GT-64',
+      slug: 'giao-tiep-64-buoi',
       name: 'Khóa giao tiếp lộ trình 64 buổi',
       level: 'Cơ bản',
       totalSessions: 64,
@@ -55,6 +59,30 @@ async function main() {
       listPrice: 0,
     },
   });
+}
+
+function printDemoAccounts(accounts: Array<{ username: string; password: string; role: string }>) {
+  console.log('\n=== TÀI KHOẢN DEMO (mật khẩu sinh ngẫu nhiên, chỉ hiện một lần) ===');
+  for (const account of accounts) {
+    console.log(`  ${account.role.padEnd(8)} | ${account.username.padEnd(12)} | ${account.password}`);
+  }
+  console.log('  Lưu lại mật khẩu ngay. Chạy lại seed sẽ sinh mật khẩu mới.');
+  console.log('  Tất cả tài khoản demo đều bắt buộc đổi mật khẩu ở lần đăng nhập đầu.\n');
+}
+
+async function main() {
+  if (isDemo) {
+    // Seed demo chỉ chạy trên database trống và không bao giờ chạy ở production.
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('Từ chối chạy seed --demo ở môi trường production.');
+    }
+    const accounts = await seedDemo(prisma);
+    console.log('Đã tạo dữ liệu demo (toàn bộ là dữ liệu giả lấy từ mock của frontend).');
+    printDemoAccounts(accounts);
+    return;
+  }
+
+  await seedBase();
 }
 
 main()

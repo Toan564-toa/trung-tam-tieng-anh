@@ -3,6 +3,17 @@ import { z } from 'zod';
 export const loginSchema = z.object({
   username: z.string().trim().min(1, 'Vui lòng nhập tên đăng nhập'),
   password: z.string().min(1, 'Vui lòng nhập mật khẩu'),
+  portal: z.enum(['client', 'admin']).default('client'),
+});
+
+export const forgotPasswordSchema = z.object({ email: z.string().trim().email().max(200) });
+export const resetPasswordSchema = z.object({
+  token: z.string().min(32).max(200),
+  newPassword: z
+    .string()
+    .min(8)
+    .regex(/[A-Za-z]/)
+    .regex(/[0-9]/),
 });
 
 export const changePasswordSchema = z

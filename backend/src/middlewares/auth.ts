@@ -26,10 +26,24 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
   const userId = Number(payload.sub);
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, status: true, deletedAt: true, roles: { select: { role: { select: { code: true } } } } },
+    select: {
+      id: true,
+      status: true,
+      deletedAt: true,
+      tokenVersion: true,
+      mustChangePassword: true,
+      roles: { select: { role: { select: { code: true } } } },
+    },
   });
 
   if (!user || user.deletedAt || user.status !== 'ACTIVE') throw HttpError.unauthorized();
+  if (payload.ver !== user.tokenVersion) throw HttpError.unauthorized('Phiên đăng nhập đã hết hiệu lực');
+  const originalPath = req.originalUrl.split('?')[0];
+  const passwordChangeAllowed =
+    originalPath === '/api/auth/me' ||
+    originalPath === '/api/auth/change-password' ||
+    originalPath === '/api/auth/logout';
+  if (user.mustChangePassword && !passwordChangeAllowed) throw HttpError.passwordChangeRequired();
 
   // Lấy vai trò từ DB (không tin hoàn toàn vào token)
   req.user = { id: user.id, roles: user.roles.map((r) => r.role.code) };

@@ -1,6 +1,14 @@
-// Schema khởi đầu (đợt 1-2 của thiết kế database). Mở rộng dần theo file thiết kế đầy đủ.
-// Lưu ý: tên trường dùng camelCase trong code; tên bảng ánh xạ sang snake_case số nhiều.
-// Muốn cột snake_case trong DB, thêm @map("ten_cot") cho từng trường.
+// Database Trung tâm Ngoại ngữ — PostgreSQL.
+//
+// Quy ước (xem docs/DB.md):
+//   - Tên bảng và cột trong DB: snake_case, số nhiều  -> dùng @@map / @map.
+//   - Tên trường trong Prisma và JSON: camelCase (AGENTS.md mục 5).
+//   - Tiền: số nguyên VND. Thời gian: timestamptz (UTC). Ngày thuần: date.
+//   - Xóa mềm bằng `deleted_at` cho hồ sơ người và nội dung.
+//   - Công nợ / tiến độ học: TÍNH RA bằng VIEW, không lưu cột nhập tay.
+//
+// Ràng buộc Prisma không biểu đạt được (CHECK, unique có điều kiện, trigger, view)
+// nằm trong migration `constraints` — xem docs/DB.md mục "Ràng buộc bằng SQL".
 
 generator client {
   provider = "prisma-client-js"
@@ -11,10 +19,16 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ============================================================================
+// ENUM
+// ============================================================================
+
 enum UserStatus {
   ACTIVE
+  PENDING
   LOCKED
   DISABLED
+  ARCHIVED
 }
 
 enum Gender {
@@ -23,11 +37,42 @@ enum Gender {
   OTHER
 }
 
+// Trạng thái ở cấp HỌC VIÊN (khác `EnrollmentStatus` ở cấp lần ghi danh).
+// [CẦN XÁC NHẬN] Q3: giao diện dùng active/paused/finished/dropped.
 enum StudentStatus {
   STUDYING
   FROZEN
   DROPPED
   GRADUATED
+}
+
+// Trạng thái hồ sơ giáo viên / nhân viên.
+enum PersonStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum BranchStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum RoomStatus {
+  AVAILABLE
+  MAINTENANCE
+}
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+// Dùng cho bài đăng, banner, giáo viên hiển thị landing.
+enum PublishStatus {
+  DRAFT
+  PENDING
+  PUBLISHED
 }
 
 enum ClassStatus {
@@ -44,6 +89,12 @@ enum SessionStatus {
   MAKEUP
 }
 
+enum ClassTeacherRole {
+  MAIN
+  ASSISTANT
+}
+
+// Trạng thái ở cấp LẦN GHI DANH.
 enum EnrollmentStatus {
   ACTIVE
   FROZEN
@@ -59,10 +110,83 @@ enum AttendanceStatus {
   EXCUSED
 }
 
+// MANUAL là giá trị dùng thật ở P1/P2. QR / FACE chỉ chừa chỗ cho P3
+// (đặc tả mục 5), backend chưa có luồng điểm danh tương ứng.
 enum AttendanceMethod {
   MANUAL
   QR
   FACE
+}
+
+enum MakeupStatus {
+  SCHEDULED
+  DONE
+}
+
+enum AssessmentKind {
+  UNIT
+  MID
+  FINAL
+  QUIZ
+}
+
+enum AssignmentStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+enum InvoiceStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+// Mã thanh toán, khớp docs/API.md (màn thu tiền). Nhãn tiếng Việt do frontend hiển thị.
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  CARD
+  EWALLET
+}
+
+enum RefundStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+// Loại khoản điều chỉnh khi nhập sai (thay cho sửa/xóa payment).
+enum AdjustmentType {
+  CORRECTION
+  REVERSAL
+  SURCHARGE
+}
+
+enum DiscountType {
+  PERCENT
+  AMOUNT
+}
+
+enum CashCloseStatus {
+  BALANCED
+  PENDING
+  DIFF
+}
+
+enum PayrollStatus {
+  DRAFT
+  PENDING
+  APPROVED
+}
+
+enum PayRateType {
+  PER_LESSON
+  PER_HOUR
+  MONTHLY
 }
 
 enum LeadStatus {
@@ -73,284 +197,1673 @@ enum LeadStatus {
   LOST
 }
 
-// ---------- Tài khoản và phân quyền ----------
+enum LeadActivityType {
+  CALL
+  MESSAGE
+  MEETING
+  EMAIL
+  NOTE
+}
+
+enum LeadNoteResult {
+  CONNECTED
+  NO_ANSWER
+  BUSY
+  CALLBACK
+}
+
+enum EventScope {
+  ALL
+  TEACHERS
+  STAFF
+  CLASSES
+}
+
+enum EventAudienceType {
+  ALL
+  CLASS
+  ROLE
+  USER
+}
+
+// Màu/nhấn mạnh của thông báo — frontend có bảng `NOTIFICATION_TONE` tương ứng.
+enum Tone {
+  INFO
+  SUCCESS
+  WARNING
+  DANGER
+}
+
+enum ProfileChangeStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ImportKind {
+  STUDENT
+  TEACHER
+  STAFF
+}
+
+enum ImportBatchStatus {
+  UPLOADED
+  PREVIEWED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum ImportRowStatus {
+  PENDING
+  VALID
+  ERROR
+  CREATED
+}
+
+// ============================================================================
+// NHÓM A — TÀI KHOẢN, PHÂN QUYỀN, BẢO MẬT
+// ============================================================================
 
 model Role {
-  id    Int        @id @default(autoincrement())
-  code  String     @unique // admin | staff | teacher | student | guardian
-  name  String
-  users UserRole[]
+  id        Int      @id @default(autoincrement())
+  code      String   @unique @db.VarChar(50) // admin | staff | teacher | student | guardian
+  name      String   @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  users       UserRole[]
+  permissions RolePermission[]
 
   @@map("roles")
 }
 
+model Permission {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique @db.VarChar(100) // ví dụ: payment.refund, student.delete
+  name        String   @db.VarChar(150)
+  description String?  @db.VarChar(300)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       Int      @map("role_id")
+  permissionId Int      @map("permission_id")
+  grantedAt    DateTime @default(now()) @map("granted_at") @db.Timestamptz(3)
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
 model User {
-  id               Int            @id @default(autoincrement())
-  username         String         @unique
-  email            String?        @unique
-  phone            String?
-  passwordHash     String
-  status           UserStatus     @default(ACTIVE)
-  mustChangePassword Boolean      @default(true)
-  failedLoginCount Int            @default(0)
-  lockedUntil      DateTime?
-  lastLoginAt      DateTime?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  deletedAt        DateTime?
+  id                 Int        @id @default(autoincrement())
+  username           String     @unique @db.VarChar(100)
+  fullName           String?    @map("full_name") @db.VarChar(150)
+  // Ở cấp TÀI KHOẢN email vẫn duy nhất. `students.email` thì KHÔNG (D-021).
+  email              String?    @unique @db.VarChar(200)
+  phone              String?    @db.VarChar(20)
+  passwordHash       String     @map("password_hash") @db.VarChar(255)
+  status             UserStatus @default(PENDING)
+  mustChangePassword Boolean    @default(true) @map("must_change_password")
+  tokenVersion       Int        @default(0) @map("token_version")
+  failedLoginCount   Int        @default(0) @map("failed_login_count")
+  lockedUntil        DateTime?  @map("locked_until") @db.Timestamptz(3)
+  lastLoginAt        DateTime?  @map("last_login_at") @db.Timestamptz(3)
+  avatarFileId       Int?       @map("avatar_file_id")
+  createdAt          DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt          DateTime?  @map("deleted_at") @db.Timestamptz(3)
 
-  roles            UserRole[]
-  teacher          Teacher?
-  staff            Staff?
-  student          Student?
-  attendanceMarked Attendance[]
-  auditLogs        AuditLog[]
-  loginHistory     LoginHistory[]
+  avatarFile File?      @relation("UserAvatar", fields: [avatarFileId], references: [id], onDelete: SetNull)
+  roles      UserRole[]
+  guardian   Guardian?
+  teacher    Teacher?
+  staff      Staff?
+  student    Student?
 
+  loginHistory        LoginHistory[]
+  auditLogs           AuditLog[]
+  sensitiveAccessLogs SensitiveAccessLog[]
+  passwordResetTokens PasswordResetToken[]
+  refreshTokens       RefreshToken[]
+  uploadedFiles       File[]                 @relation("FileUploader")
+  markedAttendance    Attendance[]
+  profileChangeReqs   ProfileChangeRequest[] @relation("ProfileChangeUser")
+  reviewedChangeReqs  ProfileChangeRequest[] @relation("ProfileChangeReviewer")
+  payRates            PayRate[]
+  payrollItems        PayrollItem[]
+  payRatesGranted     UserRole[]             @relation("UserRoleGrantor")
+  eventsCreated       Event[]                @relation("EventCreator")
+  eventsUpdated       Event[]                @relation("EventUpdater")
+  announcements       Announcement[]
+  notifications       Notification[]
+  posts               Post[]
+  approvedPosts       Post[]                 @relation("PostApprover")
+  settingsUpdated     Setting[]
+  importBatches       ImportBatch[]
+  attendanceChanges   AttendanceChange[]
+  enrollmentFreezes   EnrollmentFreeze[]
+  assessmentsCreated  Assessment[]
+  assignmentsCreated  Assignment[]
+  refundsRequested    Refund[]               @relation("RefundRequester")
+  refundsApproved     Refund[]               @relation("RefundApprover")
+  invoiceDiscounts    InvoiceDiscount[]
+  paymentAdjustments  PaymentAdjustment[]
+  invoiceItems        InvoiceItem[]
+  cashClosings        DailyCashClosing[]
+  payRatesAsApprover  Discount[]
+  payrollPeriodLocks  PayrollPeriod[]
+  studentNotes        StudentNote[]
+  siteContentsUpdated SiteContent[]
+  invoicesCreated     Invoice[]
+  paymentsCollected   Payment[]
+  enrollmentsCreated  Enrollment[]
+  studentAssignments  StudentAssignment[]
+  scoreChanges        ScoreChange[]
+
+  @@index([status])
+  @@index([deletedAt])
+  @@index([phone])
   @@map("users")
 }
 
 model UserRole {
-  userId Int
-  roleId Int
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role   Role @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  userId    Int      @map("user_id")
+  roleId    Int      @map("role_id")
+  branchId  Int?     @map("branch_id")
+  grantedBy Int?     @map("granted_by")
+  grantedAt DateTime @default(now()) @map("granted_at") @db.Timestamptz(3)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role    Role    @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  branch  Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  grantor User?   @relation("UserRoleGrantor", fields: [grantedBy], references: [id], onDelete: SetNull)
 
   @@id([userId, roleId])
+  @@index([roleId])
+  @@index([branchId])
   @@map("user_roles")
 }
 
 model LoginHistory {
   id        Int      @id @default(autoincrement())
-  userId    Int?
-  username  String
+  userId    Int?     @map("user_id")
+  username  String   @db.VarChar(100)
   success   Boolean
-  ip        String?
-  userAgent String?
-  createdAt DateTime @default(now())
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  ip        String?  @db.VarChar(64)
+  userAgent String?  @map("user_agent") @db.VarChar(300)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([createdAt])
+  @@index([username])
   @@map("login_history")
+}
+
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  tokenHash String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
+}
+
+// Bảng này KHÔNG chứa token thô: chỉ lưu băm, giống mật khẩu.
+model RefreshToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  tokenId   String    @unique @default(dbgenerated("gen_random_uuid()")) @map("token_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  userAgent String?   @map("user_agent") @db.VarChar(300)
+  ip        String?   @db.VarChar(64)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  // parentRefreshTokenId: token trước đó trong chuỗi xoay vòng. Dùng để phát hiện reuse:
+  // khi refresh, token mới ghi parent = token cũ. Nếu token mới có parent mà parent đã revoked
+  // → cả dòng mới đều bị coi là bị đánh cắp và thu hồi.
+  parentRefreshTokenId Int?     @map("parent_refresh_token_id")
+
+  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentRefreshToken RefreshToken?   @relation("refreshChain", fields: [parentRefreshTokenId], references: [id], onDelete: SetNull)
+  childRefreshTokens  RefreshToken[] @relation("refreshChain")
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([parentRefreshTokenId])
+  @@map("refresh_tokens")
 }
 
 model AuditLog {
   id        Int      @id @default(autoincrement())
-  userId    Int?
-  action    String
-  tableName String
-  recordId  String?
-  oldData   Json?
-  newData   Json?
-  ip        String?
-  createdAt DateTime @default(now())
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId    Int?     @map("user_id")
+  action    String   @db.VarChar(100)
+  tableName String   @map("table_name") @db.VarChar(100)
+  recordId  String?  @map("record_id") @db.VarChar(64)
+  oldData   Json?    @map("old_data")
+  newData   Json?    @map("new_data")
+  ip        String?  @db.VarChar(64)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([tableName, recordId])
   @@index([userId])
+  @@index([createdAt])
   @@map("audit_logs")
 }
 
-// Bộ đếm sinh mã không trùng (mã học viên, số biên lai...)
+// Ghi khi ai đọc dữ liệu nhạy cảm (lương, CCCD, dữ liệu sinh trắc học).
+// Không có màn hình xem — chỉ ghi ở backend.
+model SensitiveAccessLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?     @map("user_id")
+  dataType  String   @map("data_type") @db.VarChar(100) // payroll | student_identity | biometric
+  recordId  String?  @map("record_id") @db.VarChar(64)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([dataType])
+  @@index([createdAt])
+  @@map("sensitive_access_logs")
+}
+
+// ============================================================================
+// NHÓM B — CƠ SỞ, PHÒNG HỌC, CẤU HÌNH, TỆP
+// ============================================================================
+
+model Branch {
+  id        Int          @id @default(autoincrement())
+  name      String       @db.VarChar(150)
+  address   String?      @db.VarChar(300)
+  phone     String?      @db.VarChar(20)
+  status    BranchStatus @default(ACTIVE)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime?    @map("deleted_at") @db.Timestamptz(3)
+
+  rooms       Room[]
+  classes     Class[]
+  userRoles   UserRole[]
+  lockDays    AttendanceLockDays[]
+  students    Student[]
+  instructors Teacher[]
+
+  @@index([status])
+  @@map("branches")
+}
+
+model Room {
+  id        Int        @id @default(autoincrement())
+  branchId  Int        @map("branch_id")
+  name      String     @db.VarChar(100)
+  capacity  Int
+  floor     Int?
+  equipment String[]   @default([])
+  status    RoomStatus @default(AVAILABLE)
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime?  @map("deleted_at") @db.Timestamptz(3)
+
+  branch          Branch          @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  classes         Class[]
+  classSchedules  ClassSchedule[]
+  classSessions   ClassSession[]
+  assessmentSlots Assessment[]
+  testRooms       Testimonial[]
+
+  @@index([branchId])
+  @@index([status])
+  @@map("rooms")
+}
+
+// Ca học cố định để dựng thời khóa biểu.
+// [CẦN XÁC NHẬN] Q6: Ca 7 (19:00–20:30) và Ca 8 (19:45–21:15) của giao diện đang chồng nhau.
+model TimeSlot {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique @db.VarChar(20)
+  label     String   @db.VarChar(100)
+  startTime String   @map("start_time") @db.VarChar(5) // "19:00"
+  endTime   String   @map("end_time") @db.VarChar(5) // "20:30"
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  schedules ClassSchedule[]
+
+  @@index([sortOrder])
+  @@map("time_slots")
+}
+
+model Setting {
+  key         String   @id @db.VarChar(100)
+  value       Json
+  description String?  @db.VarChar(300)
+  updatedBy   Int?     @map("updated_by")
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  updater User? @relation(fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@map("settings")
+}
+
+model File {
+  id           Int      @id @default(autoincrement())
+  storageKey   String   @unique @map("storage_key") @db.VarChar(300)
+  originalName String   @map("original_name") @db.VarChar(255)
+  mimeType     String   @map("mime_type") @db.VarChar(120)
+  size         Int
+  checksum     String?  @db.VarChar(128)
+  uploadedBy   Int?     @map("uploaded_by")
+  ownerType    String?  @map("owner_type") @db.VarChar(50)
+  ownerId      Int?     @map("owner_id")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  uploader      User?          @relation("FileUploader", fields: [uploadedBy], references: [id], onDelete: SetNull)
+  userAvatars   User[]         @relation("UserAvatar")
+  studentPhotos Student[]      @relation("StudentPhoto")
+  teacherPhotos Teacher[]      @relation("TeacherPhoto")
+  staffPhotos   Staff[]        @relation("StaffPhoto")
+  courseImages  Course[]       @relation("CourseImage")
+  postCovers    Post[]         @relation("PostCover")
+  banners       SiteBanner[]
+  testimonials  Testimonial[]
+  galleryItems  GalleryItem[]
+  courseLessons CourseLesson[]
+  assignments   Assignment[]
+  importBatches ImportBatch[]
+
+  @@index([uploadedBy])
+  @@index([ownerType, ownerId])
+  @@map("files")
+}
+
+// Bộ đếm sinh mã không trùng (mã học viên, số biên lai, theo năm).
 model Sequence {
-  key       String @id // ví dụ: "student-2026"
-  lastValue Int    @default(0)
+  name      String   @id @db.VarChar(100) // ví dụ: "student-2026"
+  year      Int?
+  lastValue Int      @default(0) @map("last_value")
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@map("sequences")
 }
 
-// ---------- Con người ----------
+// Số ngày sau khi lưu điểm danh thì khoá không cho sửa.
+// Một dòng cho toàn trung tâm (branch_id = null) và ghi đè theo từng cơ sở.
+model AttendanceLockDays {
+  id        Int      @id @default(autoincrement())
+  branchId  Int?     @map("branch_id")
+  days      Int      @default(7)
+  note      String?  @db.VarChar(300)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([branchId])
+  @@map("attendance_lock_days")
+}
+
+// ============================================================================
+// NHÓM C — CON NGƯỜI
+// ============================================================================
+
+model Student {
+  id          Int           @id @default(autoincrement())
+  userId      Int?          @unique @map("user_id")
+  studentCode String        @unique @map("student_code") @db.VarChar(30)
+  fullName    String        @map("full_name") @db.VarChar(150)
+  birthDate   DateTime?     @map("birth_date") @db.Date
+  gender      Gender?
+  phone       String?       @db.VarChar(20)
+  // KHÔNG duy nhất: phụ huynh dùng chung email, học viên dùng email nhà/trường (D-021).
+  email       String?       @db.VarChar(200)
+  address     String?       @db.VarChar(300)
+  // Dữ liệu cá nhân nhạy cảm: giới hạn quyền đọc, không ghi vào log/audit.
+  identityNo  String?       @map("identity_no") @db.VarChar(50)
+  occupation  String?       @db.VarChar(150)
+  level       String?       @db.VarChar(100)
+  school      String?       @db.VarChar(200)
+  sourceId    Int?          @map("source_id")
+  photoFileId Int?          @map("photo_file_id")
+  note        String?       @db.Text
+  status      StudentStatus @default(STUDYING)
+  advisorId   Int?          @map("advisor_id")
+  branchId    Int?          @map("branch_id")
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime?     @map("deleted_at") @db.Timestamptz(3)
+
+  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  photoFile File?       @relation("StudentPhoto", fields: [photoFileId], references: [id], onDelete: SetNull)
+  source    LeadSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  advisor   Staff?      @relation(fields: [advisorId], references: [id], onDelete: SetNull)
+  branch    Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  guardians          StudentGuardian[]
+  assignments        StudentAssignment[]
+  enrollments        Enrollment[]
+  attendance         Attendance[]
+  scores             Score[]
+  notes              StudentNote[]
+  feedbacks          StudentFeedback[]
+  makeupSessions     MakeupSession[]
+  convertedFromLeads Lead[]
+
+  @@index([phone])
+  @@index([fullName])
+  @@index([status])
+  @@index([deletedAt])
+  @@index([advisorId])
+  @@index([sourceId])
+  @@map("students")
+}
+
+model Guardian {
+  id         Int       @id @default(autoincrement())
+  userId     Int?      @unique @map("user_id")
+  fullName   String    @map("full_name") @db.VarChar(150)
+  phone      String    @db.VarChar(20)
+  email      String?   @db.VarChar(200)
+  occupation String?   @db.VarChar(150)
+  address    String?   @db.VarChar(300)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  user     User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  students StudentGuardian[]
+
+  @@index([phone])
+  @@index([fullName])
+  @@map("guardians")
+}
+
+model StudentGuardian {
+  studentId            Int      @map("student_id")
+  guardianId           Int      @map("guardian_id")
+  relation             String   @db.VarChar(50) // Bố | Mẹ | Ông | Bà | Anh chị
+  isPrimary            Boolean  @default(false) @map("is_primary")
+  receivesNotification Boolean  @default(true) @map("receives_notification")
+  receivesInvoice      Boolean  @default(false) @map("receives_invoice")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  student  Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  guardian Guardian @relation(fields: [guardianId], references: [id], onDelete: Cascade)
+
+  @@id([studentId, guardianId])
+  @@index([guardianId])
+  @@map("student_guardians")
+}
 
 model Teacher {
-  id            Int       @id @default(autoincrement())
-  userId        Int       @unique
-  teacherCode   String    @unique
-  fullName      String
-  phone         String?
-  specialty     String?
-  showOnWebsite Boolean   @default(false)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  deletedAt     DateTime?
+  id            Int          @id @default(autoincrement())
+  // Có thể chưa có tài khoản (tạo hồ sơ trước, tạo tài khoản sau).
+  userId        Int?         @unique @map("user_id")
+  teacherCode   String       @unique @map("teacher_code") @db.VarChar(30)
+  fullName      String       @map("full_name") @db.VarChar(150)
+  phone         String?      @db.VarChar(20)
+  email         String?      @db.VarChar(200)
+  specialty     String?      @db.VarChar(200)
+  certificate   String?      @db.VarChar(300)
+  experience    String?      @db.VarChar(200)
+  education     String?      @db.VarChar(300)
+  bio           String?      @db.Text
+  startDate     DateTime?    @map("start_date") @db.Date
+  photoFileId   Int?         @map("photo_file_id")
+  showOnWebsite Boolean      @default(false) @map("show_on_website")
+  status        PersonStatus @default(ACTIVE)
+  branchId      Int?         @map("branch_id")
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt     DateTime?    @map("deleted_at") @db.Timestamptz(3)
 
-  user          User           @relation(fields: [userId], references: [id], onDelete: Restrict)
-  classes       Class[]
+  user      User?   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  photoFile File?   @relation("TeacherPhoto", fields: [photoFileId], references: [id], onDelete: SetNull)
+  branch    Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  classes       Class[]           @relation("ClassMainTeacher")
+  classTeachers ClassTeacher[]
   sessions      ClassSession[]
+  scores        Score[]
+  feedbacks     StudentFeedback[]
 
+  @@index([status])
+  @@index([deletedAt])
+  @@index([showOnWebsite])
   @@map("teachers")
 }
 
 model Staff {
-  id        Int       @id @default(autoincrement())
-  userId    Int       @unique
-  staffCode String    @unique
-  fullName  String
-  phone     String?
-  position  String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  id          Int          @id @default(autoincrement())
+  // Có thể chưa có tài khoản (tạo hồ sơ trước, tạo tài khoản sau).
+  userId      Int?         @unique @map("user_id")
+  staffCode   String       @unique @map("staff_code") @db.VarChar(30)
+  fullName    String       @map("full_name") @db.VarChar(150)
+  phone       String?      @db.VarChar(20)
+  email       String?      @db.VarChar(200)
+  position    String?      @db.VarChar(150)
+  department  String?      @db.VarChar(150)
+  education   String?      @db.VarChar(300)
+  bio         String?      @db.Text
+  startDate   DateTime?    @map("start_date") @db.Date
+  photoFileId Int?         @map("photo_file_id")
+  status      PersonStatus @default(ACTIVE)
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime?    @map("deleted_at") @db.Timestamptz(3)
 
-  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
-  students  Student[]
-  leads     Lead[]
+  user      User? @relation(fields: [userId], references: [id], onDelete: Restrict)
+  photoFile File? @relation("StaffPhoto", fields: [photoFileId], references: [id], onDelete: SetNull)
 
+  advisedStudents Student[]
+  assignments     StudentAssignment[]
+  leads           Lead[]
+  leadActivities  LeadActivity[]
+  cashClosings    DailyCashClosing[]
+
+  @@index([status])
+  @@index([deletedAt])
   @@map("staff")
 }
 
-model Student {
-  id          Int           @id @default(autoincrement())
-  userId      Int?          @unique
-  studentCode String        @unique
-  fullName    String
-  dob         DateTime?     @db.Date
-  gender      Gender?
-  phone       String?
-  email       String?
-  address     String?
-  note        String?
-  status      StudentStatus @default(STUDYING)
-  advisorId   Int?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  deletedAt   DateTime?
+// Lịch sử nhân viên phụ trách hồ sơ học viên.
+model StudentAssignment {
+  id        Int       @id @default(autoincrement())
+  studentId Int       @map("student_id")
+  staffId   Int       @map("staff_id")
+  fromDate  DateTime  @map("from_date") @db.Date
+  toDate    DateTime? @map("to_date") @db.Date
+  reason    String?   @db.VarChar(300)
+  createdBy Int?      @map("created_by")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  user        User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
-  advisor     Staff?         @relation(fields: [advisorId], references: [id], onDelete: SetNull)
-  enrollments Enrollment[]
-  attendance  Attendance[]
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  staff   Staff   @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  creator User?   @relation(fields: [createdBy], references: [id], onDelete: SetNull)
 
-  @@index([phone])
-  @@index([fullName])
-  @@map("students")
+  @@index([studentId])
+  @@index([staffId])
+  @@map("student_assignments")
 }
 
-// ---------- Đào tạo ----------
+// Học viên/nhân viên đề nghị sửa hồ sơ, chờ duyệt.
+model ProfileChangeRequest {
+  id         Int                 @id @default(autoincrement())
+  userId     Int                 @map("user_id")
+  tableName  String              @map("table_name") @db.VarChar(100)
+  fieldName  String              @map("field_name") @db.VarChar(100)
+  oldValue   String?             @map("old_value") @db.Text
+  newValue   String?             @map("new_value") @db.Text
+  status     ProfileChangeStatus @default(PENDING)
+  reviewedBy Int?                @map("reviewed_by")
+  reviewedAt DateTime?           @map("reviewed_at") @db.Timestamptz(3)
+  createdAt  DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user     User  @relation("ProfileChangeUser", fields: [userId], references: [id], onDelete: Cascade)
+  reviewer User? @relation("ProfileChangeReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([userId])
+  @@map("profile_change_requests")
+}
+
+// Ghi chú chăm sóc học viên (tab "Ghi chú" ở màn nhân viên).
+model StudentNote {
+  id        Int       @id @default(autoincrement())
+  studentId Int       @map("student_id")
+  title     String    @db.VarChar(200)
+  body      String    @db.Text
+  tone      Tone      @default(INFO)
+  authorId  Int?      @map("author_id")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  author  User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([studentId])
+  @@index([createdAt])
+  @@map("student_notes")
+}
+
+// ============================================================================
+// NHÓM D — ĐÀO TẠO
+// ============================================================================
 
 model Course {
-  id              Int       @id @default(autoincrement())
-  code            String    @unique
-  name            String
-  level           String?
-  totalSessions   Int       @default(64)
-  sessionsPerWeek Int       @default(2)
-  durationMonths  Int       @default(8)
-  listPrice       Int       @default(0) // VND, số nguyên
-  isPublic        Boolean   @default(true)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  deletedAt       DateTime?
+  id              Int          @id @default(autoincrement())
+  code            String       @unique @db.VarChar(50)
+  slug            String       @unique @db.VarChar(150)
+  name            String       @db.VarChar(200)
+  level           String?      @db.VarChar(100)
+  language        String?      @db.VarChar(100)
+  description     String?      @db.Text
+  // Lộ trình nằm trong dữ liệu, không hardcode trong code.
+  totalSessions   Int          @default(64) @map("total_sessions")
+  sessionsPerWeek Int          @default(2) @map("sessions_per_week")
+  durationMonths  Int          @default(8) @map("duration_months")
+  listPrice       Int          @default(0) // VND
+  minAge          Int?         @map("min_age")
+  maxAge          Int?         @map("max_age")
+  // Chỉ tiêu sĩ số để báo cáo tỷ lệ lấp đầy.
+  targetStudents  Int?         @map("target_students")
+  audience        String?      @db.VarChar(200)
+  // Landing hiển thị nhiều khung giờ cho một khóa ("Thứ 2 & Thứ 4 · 17:30 – 19:00", ...)
+  schedule        String[]     @default([])
+  highlights      String[]     @default([])
+  featured        Boolean      @default(false)
+  levelTone       String?      @map("level_tone") @db.VarChar(50)
+  imageFileId     Int?         @map("image_file_id")
+  isPublic        Boolean      @default(true) @map("is_public")
+  status          CourseStatus @default(DRAFT)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt       DateTime?    @map("deleted_at") @db.Timestamptz(3)
 
-  classes         Class[]
+  imageFile    File?                @relation("CourseImage", fields: [imageFileId], references: [id], onDelete: SetNull)
+  lessons      CourseLesson[]
+  priceHistory CoursePriceHistory[]
+  classes      Class[]
+  leads        Lead[]
+  testimonials Testimonial[]
 
+  @@index([status])
+  @@index([isPublic])
+  @@index([deletedAt])
   @@map("courses")
+}
+
+// Giáo trình mẫu: 64 bài của khóa.
+model CourseLesson {
+  id        Int      @id @default(autoincrement())
+  courseId  Int      @map("course_id")
+  lessonNo  Int      @map("lesson_no")
+  title     String   @db.VarChar(200)
+  objective String?  @db.Text
+  content   String?  @db.Text
+  fileId    Int?     @map("file_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  file   File?  @relation(fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@unique([courseId, lessonNo])
+  @@map("course_lessons")
+}
+
+// Lịch sử giá niêm yết: hồ sơ cũ không đổi theo giá mới.
+model CoursePriceHistory {
+  id            Int       @id @default(autoincrement())
+  courseId      Int       @map("course_id")
+  price         Int
+  effectiveFrom DateTime  @map("effective_from") @db.Date
+  effectiveTo   DateTime? @map("effective_to") @db.Date
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([courseId])
+  @@map("course_price_history")
 }
 
 model Class {
   id              Int         @id @default(autoincrement())
-  courseId        Int
-  teacherId       Int
-  classCode       String      @unique
-  name            String
-  startDate       DateTime    @db.Date
-  expectedEndDate DateTime?   @db.Date
-  maxStudents     Int         @default(20)
+  branchId        Int?        @map("branch_id")
+  courseId        Int         @map("course_id")
+  classCode       String      @unique @map("class_code") @db.VarChar(50)
+  name            String      @db.VarChar(200)
+  teacherId       Int         @map("teacher_id") // giáo viên chính
+  roomId          Int?        @map("room_id")
+  advisorId       Int?        @map("advisor_id") // nhân viên phụ trách hồ sơ
+  startDate       DateTime    @map("start_date") @db.Date
+  expectedEndDate DateTime?   @map("expected_end_date") @db.Date
+  maxStudents     Int         @default(20) @map("max_students")
   status          ClassStatus @default(PLANNED)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  deletedAt       DateTime?
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt       DateTime?   @map("deleted_at") @db.Timestamptz(3)
 
-  course          Course         @relation(fields: [courseId], references: [id], onDelete: Restrict)
-  teacher         Teacher        @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  branch  Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  course  Course  @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  teacher Teacher @relation("ClassMainTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
+  room    Room?   @relation(fields: [roomId], references: [id], onDelete: SetNull)
+
+  teachers        ClassTeacher[]
+  schedules       ClassSchedule[]
   sessions        ClassSession[]
   enrollments     Enrollment[]
+  assessments     Assessment[]
+  assignments     Assignment[]
+  feedbacks       StudentFeedback[]
+  eventAudiences  EventAudience[]
+  interestedLeads Lead[]
 
   @@index([teacherId])
   @@index([courseId])
+  @@index([status])
+  @@index([deletedAt])
   @@map("classes")
 }
 
-model ClassSession {
-  id        Int           @id @default(autoincrement())
-  classId   Int
-  lessonNo  Int // buổi thứ mấy trong lộ trình (1-64)
-  date      DateTime      @db.Date
-  startTime String? // "18:00"
-  endTime   String? // "19:30"
-  teacherId Int? // giáo viên dạy thực tế
-  status    SessionStatus @default(SCHEDULED)
-  lockedAt  DateTime? // đã khóa sửa điểm danh
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+// Lịch sử / nhiều giáo viên của một lớp (đổi giáo viên giữa chừng, trợ giảng).
+model ClassTeacher {
+  id        Int              @id @default(autoincrement())
+  classId   Int              @map("class_id")
+  teacherId Int              @map("teacher_id")
+  role      ClassTeacherRole @default(MAIN)
+  fromDate  DateTime         @map("from_date") @db.Date
+  toDate    DateTime?        @map("to_date") @db.Date
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  class      Class        @relation(fields: [classId], references: [id], onDelete: Restrict)
-  teacher    Teacher?     @relation(fields: [teacherId], references: [id], onDelete: SetNull)
-  attendance Attendance[]
+  class   Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+
+  @@index([classId])
+  @@index([teacherId])
+  @@map("class_teachers")
+}
+
+// Quy tắc lịch lặp hằng tuần (tách khỏi `class_sessions` là buổi học thật).
+model ClassSchedule {
+  id            Int       @id @default(autoincrement())
+  classId       Int       @map("class_id")
+  weekday       Int // 0 = Chủ Nhật ... 6 = Thứ Bảy (đúng quy ước giao diện)
+  startTime     String    @map("start_time") @db.VarChar(5)
+  endTime       String    @map("end_time") @db.VarChar(5)
+  roomId        Int?      @map("room_id")
+  timeSlotId    Int?      @map("time_slot_id")
+  effectiveFrom DateTime? @map("effective_from") @db.Date
+  effectiveTo   DateTime? @map("effective_to") @db.Date
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  class    Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  room     Room?     @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  timeSlot TimeSlot? @relation(fields: [timeSlotId], references: [id], onDelete: SetNull)
+
+  @@unique([classId, weekday, startTime])
+  @@index([roomId])
+  @@index([timeSlotId])
+  @@map("class_schedules")
+}
+
+// Từng buổi học cụ thể — dùng để điểm danh.
+model ClassSession {
+  id           Int           @id @default(autoincrement())
+  classId      Int           @map("class_id")
+  lessonNo     Int           @map("lesson_no") // buổi thứ mấy trong lộ trình
+  date         DateTime      @db.Date
+  startTime    String?       @map("start_time") @db.VarChar(5)
+  endTime      String?       @map("end_time") @db.VarChar(5)
+  roomId       Int?          @map("room_id")
+  teacherId    Int?          @map("teacher_id") // người dạy thực tế
+  topic        String?       @db.VarChar(300)
+  unit         String?       @db.VarChar(150)
+  note         String?       @db.Text // ghi chú chung của buổi, in ra bảng điểm danh
+  status       SessionStatus @default(SCHEDULED)
+  cancelReason String?       @map("cancel_reason") @db.VarChar(300)
+  lockedAt     DateTime?     @map("locked_at") @db.Timestamptz(3)
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  class   Class    @relation(fields: [classId], references: [id], onDelete: Restrict)
+  room    Room?    @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  teacher Teacher? @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+
+  attendance         Attendance[]
+  makeupOriginals    MakeupSession[] @relation("MakeupOriginal")
+  makeupReplacements MakeupSession[] @relation("MakeupReplacement")
 
   @@unique([classId, lessonNo])
   @@index([date])
+  @@index([classId, date])
+  @@index([teacherId])
+  @@index([lockedAt])
   @@map("class_sessions")
 }
 
 model Enrollment {
-  id            Int              @id @default(autoincrement())
-  studentId     Int
-  classId       Int
-  enrolledAt    DateTime         @default(now())
-  totalSessions Int // chụp lại số buổi lúc ghi danh (ví dụ 64)
-  tuitionAmount Int // chụp lại học phí lúc ghi danh (VND)
-  status        EnrollmentStatus @default(ACTIVE)
-  createdById   Int?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  id                          Int              @id @default(autoincrement())
+  studentId                   Int              @map("student_id")
+  classId                     Int              @map("class_id")
+  enrolledAt                  DateTime         @default(now()) @map("enrolled_at") @db.Timestamptz(3)
+  startDate                   DateTime?        @map("start_date") @db.Date
+  expectedEndDate             DateTime?        @map("expected_end_date") @db.Date
+  // Chụp lại tại thời điểm ghi danh để đổi giá/lộ trình khóa không làm sai hồ sơ cũ.
+  totalSessions               Int              @map("total_sessions")
+  tuitionAmount               Int              @map("tuition_amount")
+  status                      EnrollmentStatus @default(ACTIVE)
+  pauseReason                 String?          @map("pause_reason") @db.VarChar(300)
+  transferredFromEnrollmentId Int?             @map("transferred_from_enrollment_id")
+  createdById                 Int?             @map("created_by_id")
+  createdAt                   DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                   DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  student       Student          @relation(fields: [studentId], references: [id], onDelete: Restrict)
-  class         Class            @relation(fields: [classId], references: [id], onDelete: Restrict)
+  student         Student            @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  class           Class              @relation(fields: [classId], references: [id], onDelete: Restrict)
+  transferredFrom Enrollment?        @relation("EnrollmentTransfer", fields: [transferredFromEnrollmentId], references: [id], onDelete: SetNull)
+  transferredTo   Enrollment[]       @relation("EnrollmentTransfer")
+  createdBy       User?              @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  invoices        Invoice[]
+  attendance      Attendance[]
+  freezes         EnrollmentFreeze[]
 
-  @@unique([studentId, classId])
+  // Ràng buộc "mỗi học viên chỉ có 1 enrollment ACTIVE trong 1 lớp" là UNIQUE CÓ ĐIỀU KIỆN
+  // nên không khai báo ở đây — xem migration `constraints`.
   @@index([classId])
+  @@index([studentId])
+  @@index([status])
   @@map("enrollments")
 }
 
 model Attendance {
   id             Int              @id @default(autoincrement())
-  classSessionId Int
-  studentId      Int
+  classSessionId Int              @map("class_session_id")
+  studentId      Int              @map("student_id")
+  enrollmentId   Int?             @map("enrollment_id")
   status         AttendanceStatus
   method         AttendanceMethod @default(MANUAL)
-  note           String?
-  markedById     Int?
-  markedAt       DateTime         @default(now())
+  note           String?          @db.VarChar(300)
+  markedById     Int?             @map("marked_by")
+  markedAt       DateTime         @default(now()) @map("marked_at") @db.Timestamptz(3)
+  checkedInAt    DateTime?        @map("checked_in_at") @db.Timestamptz(3)
+  // Chừa chỗ cho P3 (đặc tả mục 5): chưa có bảng `devices` nên chưa ràng buộc khoá ngoại.
+  sourceDeviceId Int?             @map("source_device_id")
 
-  session        ClassSession     @relation(fields: [classSessionId], references: [id], onDelete: Restrict)
-  student        Student          @relation(fields: [studentId], references: [id], onDelete: Restrict)
-  markedBy       User?            @relation(fields: [markedById], references: [id], onDelete: SetNull)
+  classSession ClassSession       @relation(fields: [classSessionId], references: [id], onDelete: Restrict)
+  student      Student            @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  enrollment   Enrollment?        @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  markedBy     User?              @relation(fields: [markedById], references: [id], onDelete: SetNull)
+  changes      AttendanceChange[]
 
   @@unique([classSessionId, studentId])
   @@index([studentId])
+  @@index([status])
   @@map("attendance")
 }
 
-// ---------- Tuyển sinh ----------
+// Lịch sử sửa điểm danh — dữ liệu chỉ thêm.
+model AttendanceChange {
+  id           Int               @id @default(autoincrement())
+  attendanceId Int               @map("attendance_id")
+  oldStatus    AttendanceStatus? @map("old_status")
+  newStatus    AttendanceStatus  @map("new_status")
+  changedBy    Int?              @map("changed_by")
+  reason       String?           @db.VarChar(300)
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  attendance Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  user       User?      @relation(fields: [changedBy], references: [id], onDelete: SetNull)
+
+  @@index([attendanceId])
+  @@index([createdAt])
+  @@map("attendance_changes")
+}
+
+model EnrollmentFreeze {
+  id             Int       @id @default(autoincrement())
+  enrollmentId   Int       @map("enrollment_id")
+  fromDate       DateTime  @map("from_date") @db.Date
+  expectedToDate DateTime? @map("expected_to_date") @db.Date
+  reason         String    @db.VarChar(300)
+  approvedBy     Int?      @map("approved_by")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  approver   User?      @relation(fields: [approvedBy], references: [id], onDelete: SetNull)
+
+  @@index([enrollmentId])
+  @@map("enrollment_freezes")
+}
+
+model MakeupSession {
+  id                Int          @id @default(autoincrement())
+  studentId         Int          @map("student_id")
+  originalSessionId Int          @map("original_session_id")
+  makeupSessionId   Int          @map("makeup_session_id")
+  status            MakeupStatus @default(SCHEDULED)
+  note              String?      @db.VarChar(300)
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  student  Student      @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  original ClassSession @relation("MakeupOriginal", fields: [originalSessionId], references: [id], onDelete: Restrict)
+  makeup   ClassSession @relation("MakeupReplacement", fields: [makeupSessionId], references: [id], onDelete: Restrict)
+
+  @@unique([studentId, originalSessionId, makeupSessionId])
+  @@index([makeupSessionId])
+  @@map("makeup_sessions")
+}
+
+// ============================================================================
+// NHÓM E — HỌC TẬP: ĐIỂM, BÀI TẬP, NHẬN XÉT
+// ============================================================================
+
+model Assessment {
+  id        Int            @id @default(autoincrement())
+  classId   Int            @map("class_id")
+  roomId    Int?           @map("room_id")
+  name      String         @db.VarChar(200)
+  kind      AssessmentKind @default(UNIT)
+  date      DateTime       @db.Date
+  maxScore  Int            @default(10) @map("max_score")
+  weight    Int            @default(100)
+  note      String?        @db.VarChar(300)
+  createdBy Int?           @map("created_by")
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  class   Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  room    Room?   @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  creator User?   @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  scores  Score[]
+
+  @@index([classId])
+  @@index([date])
+  @@map("assessments")
+}
+
+// Một dòng = điểm của một học viên trong một bài.
+// [CẦN XÁC NHẬN] Q8: giao diện hiển thị 4 kỹ năng + nhận xét, giáo viên nhập một điểm tổng.
+// Cột `score` là điểm tổng; 4 cột kỹ năng và `comment` để trống nếu chưa tách nhạy cảm.
+model Score {
+  id           Int      @id @default(autoincrement())
+  assessmentId Int      @map("assessment_id")
+  studentId    Int      @map("student_id")
+  score        Float?
+  listening    Float?
+  reading      Float?
+  writing      Float?
+  speaking     Float?
+  comment      String?  @db.Text
+  enteredBy    Int?     @map("entered_by")
+  enteredAt    DateTime @default(now()) @map("entered_at") @db.Timestamptz(3)
+
+  assessment    Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  student       Student    @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  enteredByUser Teacher?   @relation(fields: [enteredBy], references: [id], onDelete: SetNull)
+  changes       ScoreChange[]
+
+  @@unique([assessmentId, studentId])
+  @@index([studentId])
+  @@map("scores")
+}
+
+// Lịch sử sửa điểm — dữ liệu chỉ thêm.
+model ScoreChange {
+  id           Int      @id @default(autoincrement())
+  scoreId      Int      @map("score_id")
+  oldScore     Float?
+  newScore     Float?
+  oldComment   String?  @map("old_comment") @db.Text
+  newComment   String?  @map("new_comment") @db.Text
+  changedBy    Int?     @map("changed_by")
+  reason       String?  @db.VarChar(300)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  score   Score  @relation(fields: [scoreId], references: [id], onDelete: Cascade)
+  changer User?  @relation(fields: [changedBy], references: [id], onDelete: SetNull)
+
+  @@index([scoreId])
+  @@index([createdAt])
+  @@map("score_changes")
+}
+
+model Assignment {
+  id          Int              @id @default(autoincrement())
+  classId     Int              @map("class_id")
+  title       String           @db.VarChar(200)
+  description String?          @db.Text
+  dueAt       DateTime         @map("due_at") @db.Timestamptz(3)
+  status      AssignmentStatus @default(DRAFT)
+  fileId      Int?             @map("file_id")
+  createdBy   Int?             @map("created_by")
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime?        @map("deleted_at") @db.Timestamptz(3)
+
+  class   Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+  file    File? @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  creator User? @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@index([classId])
+  @@index([dueAt])
+  @@map("assignments")
+}
+
+model StudentFeedback {
+  id                Int      @id @default(autoincrement())
+  studentId         Int      @map("student_id")
+  classId           Int      @map("class_id")
+  teacherId         Int      @map("teacher_id")
+  period            String   @db.VarChar(100) // ví dụ "Unit 1 – 3", "Học kỳ I"
+  content           String   @db.Text
+  visibleToGuardian Boolean  @default(false) @map("visible_to_guardian")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class   Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+
+  @@index([studentId])
+  @@index([classId])
+  @@map("student_feedback")
+}
+
+// ============================================================================
+// NHÓM F — HỌC PHÍ, THU CHI
+// ============================================================================
+
+// Khoản phải thu. `student_id` cố ý KHÔNG lưu ở đây: suy ra qua
+// enrollments -> students để không phải giữ hai nguồn sự thật.
+model Invoice {
+  id             Int           @id @default(autoincrement())
+  invoiceNo      String        @unique @map("invoice_no") @db.VarChar(50)
+  enrollmentId   Int           @map("enrollment_id")
+  subtotalAmount Int           @map("subtotal_amount")
+  discountAmount Int           @default(0) @map("discount_amount")
+  totalAmount    Int           @map("total_amount")
+  dueDate        DateTime?     @map("due_date") @db.Date
+  status         InvoiceStatus @default(UNPAID)
+  note           String?       @db.VarChar(300)
+  createdBy      Int?          @map("created_by")
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt      DateTime?     @map("deleted_at") @db.Timestamptz(3)
+
+  enrollment   Enrollment        @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+  creator      User?             @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  items        InvoiceItem[]
+  installments Installment[]
+  payments     Payment[]
+  refunds      Refund[]
+  discounts    InvoiceDiscount[]
+
+  @@index([status])
+  @@index([dueDate])
+  @@index([enrollmentId])
+  @@index([deletedAt])
+  @@map("invoices")
+}
+
+enum InvoiceItemType {
+  TUITION
+  MATERIAL
+  UNIFORM
+  PARKING
+  EXAM_FEE
+  OTHER
+}
+
+model InvoiceItem {
+  id          Int             @id @default(autoincrement())
+  invoiceId   Int             @map("invoice_id")
+  description String          @db.VarChar(200)
+  amount      Int
+  type        InvoiceItemType @default(OTHER)
+  createdBy   Int?            @map("created_by")
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  creator User?   @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@index([invoiceId])
+  @@map("invoice_items")
+}
+
+model Installment {
+  id            Int      @id @default(autoincrement())
+  invoiceId     Int      @map("invoice_id")
+  installmentNo Int      @map("installment_no")
+  amount        Int
+  dueDate       DateTime @map("due_date") @db.Date
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@unique([invoiceId, installmentNo])
+  @@index([dueDate])
+  @@map("installments")
+}
+
+// Mỗi lần thu tiền — CHỈ THÊM, KHÔNG SỬA, KHÔNG XÓA.
+// Trigger `payments_append_only` trong migration `constraints` chặn UPDATE/DELETE.
+// Sai số phải tạo `payment_adjustments` hoặc `refunds`.
+model Payment {
+  id            Int           @id @default(autoincrement())
+  receiptNo     String        @unique @map("receipt_no") @db.VarChar(50)
+  invoiceId     Int           @map("invoice_id")
+  amount        Int
+  paidAt        DateTime      @map("paid_at") @db.Timestamptz(3)
+  method        PaymentMethod
+  referenceCode String?       @map("reference_code") @db.VarChar(100)
+  collectedBy   Int?          @map("collected_by")
+  note          String?       @db.VarChar(300)
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  invoice     Invoice             @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  collector   User?               @relation(fields: [collectedBy], references: [id], onDelete: SetNull)
+  adjustments PaymentAdjustment[]
+  refunds     Refund[]
+
+  @@index([invoiceId])
+  @@index([paidAt])
+  @@index([collectedBy])
+  @@index([method])
+  @@map("payments")
+}
+
+model Refund {
+  id          Int          @id @default(autoincrement())
+  invoiceId   Int          @map("invoice_id")
+  paymentId   Int?         @map("payment_id")
+  amount      Int
+  reason      String       @db.VarChar(300)
+  requestedBy Int?         @map("requested_by")
+  approvedBy  Int?         @map("approved_by")
+  refundedAt  DateTime?    @map("refunded_at") @db.Timestamptz(3)
+  status      RefundStatus @default(PENDING)
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  requester User?    @relation("RefundRequester", fields: [requestedBy], references: [id], onDelete: SetNull)
+  approver  User?    @relation("RefundApprover", fields: [approvedBy], references: [id], onDelete: SetNull)
+
+  @@index([invoiceId])
+  @@index([status])
+  @@map("refunds")
+}
+
+model Discount {
+  id            Int          @id @default(autoincrement())
+  code          String?      @unique @db.VarChar(50)
+  name          String       @db.VarChar(200)
+  type          DiscountType
+  value         Int // phần trăm (1–100) nếu type = PERCENT, VND nếu type = AMOUNT
+  condition     String?      @db.VarChar(300)
+  effectiveFrom DateTime?    @map("effective_from") @db.Date
+  effectiveTo   DateTime?    @map("effective_to") @db.Date
+  createdBy     Int?         @map("created_by")
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt     DateTime?    @map("deleted_at") @db.Timestamptz(3)
+
+  creator  User?             @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  invoices InvoiceDiscount[]
+
+  @@map("discounts")
+}
+
+model InvoiceDiscount {
+  id          Int       @id @default(autoincrement())
+  invoiceId   Int       @map("invoice_id")
+  discountId  Int       @map("discount_id")
+  amount      Int
+  approvedBy  Int?      @map("approved_by")
+  requestedAt DateTime  @default(now()) @map("requested_at") @db.Timestamptz(3)
+  approvedAt  DateTime? @map("approved_at") @db.Timestamptz(3)
+
+  invoice  Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  discount Discount @relation(fields: [discountId], references: [id], onDelete: Restrict)
+  approver User?    @relation(fields: [approvedBy], references: [id], onDelete: SetNull)
+
+  @@unique([invoiceId, discountId])
+  @@index([discountId])
+  @@map("invoice_discounts")
+}
+
+model PaymentAdjustment {
+  id        Int            @id @default(autoincrement())
+  paymentId Int            @map("payment_id")
+  type      AdjustmentType
+  amount    Int // dương = bù thêm, âm = bù trừ
+  reason    String         @db.VarChar(300)
+  createdBy Int?           @map("created_by")
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  creator User?   @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@index([paymentId])
+  @@map("payment_adjustments")
+}
+
+model DailyCashClosing {
+  id             Int             @id @default(autoincrement())
+  staffId        Int             @map("staff_id")
+  date           DateTime        @db.Date
+  shift          String?         @db.VarChar(50) // "Ca sáng" | "Ca chiều"
+  totalSystem    Int             @default(0) @map("total_system")
+  totalCollected Int             @default(0) @map("total_collected")
+  cashOnHand     Int             @default(0) @map("cash_on_hand")
+  bankTransfer   Int             @default(0) @map("bank_transfer")
+  difference     Int             @default(0)
+  status         CashCloseStatus @default(BALANCED)
+  note           String?         @db.VarChar(300)
+  confirmedBy    Int?            @map("confirmed_by")
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  staff     Staff @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  confirmer User? @relation(fields: [confirmedBy], references: [id], onDelete: SetNull)
+
+  @@unique([staffId, date, shift])
+  @@index([date])
+  @@index([status])
+  @@map("daily_cash_closings")
+}
+
+// ============================================================================
+// NHÓM G — LƯƠNG NHÂN SỰ
+// ============================================================================
+
+model PayRate {
+  id            Int         @id @default(autoincrement())
+  userId        Int         @map("user_id")
+  type          PayRateType
+  amount        Int // VND
+  effectiveFrom DateTime    @map("effective_from") @db.Date
+  effectiveTo   DateTime?   @map("effective_to") @db.Date
+  note          String?     @db.VarChar(300)
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([effectiveFrom])
+  @@map("pay_rates")
+}
+
+model PayrollPeriod {
+  id        Int           @id @default(autoincrement())
+  periodKey String        @unique @map("period_key") @db.VarChar(7) // "2026-09"
+  year      Int
+  month     Int
+  status    PayrollStatus @default(DRAFT)
+  lockedBy  Int?          @map("locked_by")
+  lockedAt  DateTime?     @map("locked_at") @db.Timestamptz(3)
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  locker User?         @relation(fields: [lockedBy], references: [id], onDelete: SetNull)
+  items  PayrollItem[]
+
+  @@index([year, month])
+  @@index([status])
+  @@map("payroll_periods")
+}
+
+model PayrollItem {
+  id              Int           @id @default(autoincrement())
+  payrollPeriodId Int           @map("payroll_period_id")
+  userId          Int           @map("user_id")
+  lessonsTaught   Int           @default(0) @map("lessons_taught")
+  hoursTaught     Int           @default(0) @map("hours_taught")
+  lessonRate      Int           @default(0) @map("lesson_rate") // chụp lại tại thời điểm tính lương
+  baseSalary      Int           @default(0) @map("base_salary")
+  bonus           Int           @default(0)
+  deduction       Int           @default(0)
+  allowance       Int           @default(0)
+  total           Int           @default(0)
+  status          PayrollStatus @default(DRAFT)
+  note            String?       @db.VarChar(300)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  payrollPeriod PayrollPeriod @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([payrollPeriodId])
+  @@index([userId])
+  @@map("payroll_items")
+}
+
+// ============================================================================
+// NHÓM H — TUYỂN SINH
+// ============================================================================
+
+model LeadSource {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique @db.VarChar(100) // Facebook | Website | Zalo | Giới thiệu | Khách vãng lai
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  leads    Lead[]
+  students Student[]
+
+  @@map("lead_sources")
+}
 
 model Lead {
-  id               Int        @id @default(autoincrement())
-  fullName         String
-  phone            String
-  email            String?
-  interestedCourse String?
-  source           String?
-  message          String?
-  status           LeadStatus @default(NEW)
-  assignedToId     Int?
-  note             String?
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
+  id                 Int        @id @default(autoincrement())
+  fullName           String     @map("full_name") @db.VarChar(150)
+  phone              String     @db.VarChar(20)
+  email              String?    @db.VarChar(200)
+  age                Int?
+  sourceId           Int?       @map("source_id")
+  // Nguồn ghi thô từ form công khai (landing page), khác với `source_id` đã chuẩn hoá.
+  source             String?    @db.VarChar(100)
+  utm                Json?
+  courseId           Int?       @map("course_id")
+  interestedClassId  Int?       @map("interested_class_id")
+  interestedCourse   String?    @map("interested_course") @db.VarChar(150)
+  expectedFee        Int?       @map("expected_fee")
+  status             LeadStatus @default(NEW)
+  lostReason         String?    @map("lost_reason") @db.VarChar(300)
+  assignedToId       Int?       @map("assigned_to_id")
+  nextFollowUp       DateTime?  @map("next_follow_up") @db.Timestamptz(3)
+  convertedStudentId Int?       @map("converted_student_id")
+  note               String?    @db.Text
+  createdAt          DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  assignedTo       Staff?     @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  sourceRef        LeadSource?    @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  course           Course?        @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  interestedClass  Class?         @relation(fields: [interestedClassId], references: [id], onDelete: SetNull)
+  assignedTo       Staff?         @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  convertedStudent Student?       @relation(fields: [convertedStudentId], references: [id], onDelete: SetNull)
+  activities       LeadActivity[]
 
   @@index([status])
   @@index([phone])
+  @@index([assignedToId])
+  @@index([sourceId])
+  @@index([nextFollowUp])
   @@map("leads")
+}
+
+model LeadActivity {
+  id           Int              @id @default(autoincrement())
+  leadId       Int              @map("lead_id")
+  type         LeadActivityType
+  content      String           @db.Text
+  result       LeadNoteResult?
+  staffId      Int?             @map("staff_id")
+  nextFollowUp DateTime?        @map("next_follow_up") @db.Timestamptz(3)
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  lead  Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  staff Staff? @relation(fields: [staffId], references: [id], onDelete: SetNull)
+
+  @@index([leadId])
+  @@index([createdAt])
+  @@map("lead_activities")
+}
+
+// ============================================================================
+// NHÓM I — LỊCH TRÌNH VÀ THÔNG BÁO
+// ============================================================================
+
+model EventType {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique @db.VarChar(100)
+  color     String?  @db.VarChar(50)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  events Event[]
+
+  @@map("event_types")
+}
+
+model Event {
+  id          Int        @id @default(autoincrement())
+  title       String     @db.VarChar(200)
+  eventTypeId Int?       @map("event_type_id")
+  startsAt    DateTime   @map("starts_at") @db.Timestamptz(3)
+  endsAt      DateTime?  @map("ends_at") @db.Timestamptz(3)
+  allDay      Boolean    @default(false) @map("all_day")
+  scope       EventScope @default(ALL)
+  location    String?    @db.VarChar(200)
+  description String?    @db.Text
+  createdBy   Int?       @map("created_by")
+  updatedBy   Int?       @map("updated_by")
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime?  @map("deleted_at") @db.Timestamptz(3)
+
+  eventType EventType?      @relation(fields: [eventTypeId], references: [id], onDelete: SetNull)
+  creator   User?           @relation("EventCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  updater   User?           @relation("EventUpdater", fields: [updatedBy], references: [id], onDelete: SetNull)
+  audiences EventAudience[]
+
+  @@index([startsAt])
+  @@index([eventTypeId])
+  @@index([deletedAt])
+  @@map("events")
+}
+
+model EventAudience {
+  id           Int               @id @default(autoincrement())
+  eventId      Int               @map("event_id")
+  audienceType EventAudienceType @default(ALL)
+  refId        Int?              @map("ref_id") // class_id | role_id | user_id tuỳ audienceType
+
+  event Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  class Class? @relation(fields: [refId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@map("event_audiences")
+}
+
+model Notification {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  title     String    @db.VarChar(200)
+  content   String    @db.Text
+  tone      Tone      @default(INFO)
+  link      String?   @db.VarChar(300)
+  readAt    DateTime? @map("read_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model Announcement {
+  id          Int        @id @default(autoincrement())
+  title       String     @db.VarChar(200)
+  content     String     @db.Text
+  audience    EventScope @default(ALL)
+  tone        Tone       @default(INFO)
+  publishedAt DateTime?  @map("published_at") @db.Timestamptz(3)
+  createdBy   Int?       @map("created_by")
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime?  @map("deleted_at") @db.Timestamptz(3)
+
+  creator User? @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@index([publishedAt])
+  @@index([deletedAt])
+  @@map("announcements")
+}
+
+// ============================================================================
+// NHÓM J — NỘI DUNG WEBSITE
+// ============================================================================
+
+model PostCategory {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(100)
+  slug      String   @unique @db.VarChar(120)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  posts Post[]
+
+  @@map("post_categories")
+}
+
+model Post {
+  id             Int           @id @default(autoincrement())
+  title          String        @db.VarChar(250)
+  slug           String        @unique @db.VarChar(250)
+  summary        String?       @db.VarChar(500)
+  content        String        @db.Text
+  coverFileId    Int?          @map("cover_file_id")
+  categoryId     Int?          @map("category_id")
+  status         PublishStatus @default(DRAFT)
+  facebookUrl    String?       @map("facebook_url") @db.VarChar(500)
+  publishedAt    DateTime?     @map("published_at") @db.Timestamptz(3)
+  authorId       Int?          @map("author_id")
+  approvedBy     Int?          @map("approved_by")
+  seoTitle       String?       @map("seo_title") @db.VarChar(250)
+  seoDescription String?       @map("seo_description") @db.VarChar(500)
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt      DateTime?     @map("deleted_at") @db.Timestamptz(3)
+
+  coverFile File?         @relation("PostCover", fields: [coverFileId], references: [id], onDelete: SetNull)
+  category  PostCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  author    User?         @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  approver  User?         @relation("PostApprover", fields: [approvedBy], references: [id], onDelete: SetNull)
+
+  @@index([status, publishedAt])
+  @@index([categoryId])
+  @@index([deletedAt])
+  @@map("posts")
+}
+
+model SiteBanner {
+  id        Int           @id @default(autoincrement())
+  title     String        @db.VarChar(200)
+  subtitle  String?       @db.VarChar(300)
+  cta       String?       @db.VarChar(100)
+  imageUrl  String        @map("image_url") @db.VarChar(500)
+  fileId    Int?          @map("file_id")
+  link      String?       @db.VarChar(300)
+  sortOrder Int           @default(0) @map("sort_order")
+  status    PublishStatus @default(DRAFT)
+  showFrom  DateTime?     @map("show_from") @db.Timestamptz(3)
+  showTo    DateTime?     @map("show_to") @db.Timestamptz(3)
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime?     @map("deleted_at") @db.Timestamptz(3)
+
+  file File? @relation(fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@index([status, showFrom])
+  @@map("site_banners")
+}
+
+model Testimonial {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(150)
+  role      String?  @db.VarChar(150)
+  quote     String   @db.Text
+  rating    Int      @default(5)
+  avatarUrl String?  @map("avatar_url") @db.VarChar(500)
+  fileId    Int?     @map("file_id")
+  courseId  Int?     @map("course_id")
+  roomId    Int?     @map("room_id")
+  sortOrder Int      @default(0) @map("sort_order")
+  isVisible Boolean  @default(true) @map("is_visible")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  file   File?   @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  course Course? @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  room   Room?   @relation(fields: [roomId], references: [id], onDelete: SetNull)
+
+  @@index([isVisible])
+  @@map("testimonials")
+}
+
+model GalleryItem {
+  id        Int      @id @default(autoincrement())
+  fileId    Int?     @map("file_id")
+  imageUrl  String   @map("image_url") @db.VarChar(500)
+  caption   String?  @db.VarChar(300)
+  album     String?  @db.VarChar(100)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  file File? @relation(fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@index([album, sortOrder])
+  @@map("gallery_items")
+}
+
+// Nội dung chỉnh được của landing page (giới thiệu, FAQ, lộ trình, liên hệ).
+model SiteContent {
+  key       String   @id @db.VarChar(100)
+  content   Json
+  updatedBy Int?     @map("updated_by")
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  updater User? @relation(fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@map("site_contents")
+}
+
+// ============================================================================
+// NHÓM K — IMPORT EXCEL
+// ============================================================================
+
+model ImportBatch {
+  id        Int               @id @default(autoincrement())
+  kind      ImportKind
+  fileId    Int?              @map("file_id")
+  status    ImportBatchStatus @default(UPLOADED)
+  totalRows Int               @default(0) @map("total_rows")
+  errorRows Int               @default(0) @map("error_rows")
+  note      String?           @db.VarChar(300)
+  createdBy Int?              @map("created_by")
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  file    File?       @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  creator User?       @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  rows    ImportRow[]
+
+  @@index([status])
+  @@map("import_batches")
+}
+
+model ImportRow {
+  id           Int             @id @default(autoincrement())
+  batchId      Int             @map("batch_id")
+  rowNumber    Int             @map("row_number")
+  rawData      Json            @map("raw_data")
+  status       ImportRowStatus @default(PENDING)
+  errorMessage String?         @map("error_message") @db.VarChar(500)
+  recordId     Int?            @map("record_id")
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, rowNumber])
+  @@index([batchId, status])
+  @@map("import_rows")
 }

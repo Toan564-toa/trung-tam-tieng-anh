@@ -27,6 +27,14 @@ export const loginLimiter = rateLimit({
   message,
 });
 
+export const passwordResetLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: real(5),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message,
+});
+
 // Form đăng ký tư vấn công khai: chống spam
 export const publicFormLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,

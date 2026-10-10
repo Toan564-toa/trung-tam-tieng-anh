@@ -15,6 +15,17 @@ const schema = z.object({
   REFRESH_TOKEN_TTL_SECONDS: z.coerce.number().default(604800),
   MAX_FAILED_LOGINS: z.coerce.number().default(5),
   LOCK_MINUTES: z.coerce.number().default(15),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().default(587),
+  SMTP_SECURE: z.enum(['true', 'false']).default('false'),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
+  MAIL_FROM: z.string().default('no-reply@trungtam.local'),
+  PASSWORD_RESET_URL: z.string().url().default('http://localhost:5173/dat-lai-mat-khau'),
+  // Upload tệp: giới hạn dung lượng (MB) và thư mục lưu mặc định (đĩa cục bộ).
+  // Lớp storage trừu tượng ở modules/files cho phép đổi sang S3 mà không sửa controller.
+  FILE_MAX_SIZE_MB: z.coerce.number().min(1).max(50).default(5),
+  FILE_STORAGE_DIR: z.string().min(1).default('storage/uploads'),
 });
 
 const parsed = schema.safeParse(process.env);

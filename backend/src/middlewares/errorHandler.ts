@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
+import { MulterError } from 'multer';
 import { ZodError } from 'zod';
 import { logger } from '../config/logger';
 import { isProd } from '../config/env';
@@ -18,6 +19,21 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
         message: 'Dữ liệu gửi lên không hợp lệ',
         details: err.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
       },
+    });
+  }
+
+  // Lỗi upload tệp (multer): quá dung lượng hoặc lỗi multipart.
+  if (err instanceof MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({
+        error: {
+          code: 'FILE_TOO_LARGE',
+          message: 'Tệp vượt quá dung lượng cho phép',
+        },
+      });
+    }
+    return res.status(400).json({
+      error: { code: 'FILE_UPLOAD_ERROR', message: 'Tải tệp lên không thành công' },
     });
   }
 

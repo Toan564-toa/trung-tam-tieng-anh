@@ -1,0 +1,65 @@
+### REST Client — quản lý tài khoản (chỉ admin)
+@baseUrl = http://localhost:4000
+@accountId = 2
+
+### 1. Đăng nhập admin trước; REST Client tự giữ cookie Set-Cookie
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "DoiMatKhauNay@123",
+  "portal": "admin"
+}
+
+### 2. Danh sách và bộ lọc
+GET {{baseUrl}}/api/users?role=student&status=active&query=Nguyen&onlyDeleted=false&page=1&pageSize=10
+
+### 3. Tạo tài khoản — lưu mật khẩu tạm ngay, response chỉ hiển thị một lần
+POST {{baseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "username": "hv-demo-01",
+  "fullName": "Học viên Demo",
+  "email": "hocvien@example.test",
+  "phone": "0900000000",
+  "roles": ["student"]
+}
+
+### 4. Cập nhật thông tin và thay toàn bộ vai trò
+PATCH {{baseUrl}}/api/users/{{accountId}}
+Content-Type: application/json
+
+{
+  "fullName": "Học viên Demo Đã sửa",
+  "roles": ["student", "guardian"]
+}
+
+### 5. Khóa tài khoản — thu hồi refresh token và vô hiệu hóa access token
+PATCH {{baseUrl}}/api/users/{{accountId}}/status
+Content-Type: application/json
+
+{
+  "status": "locked"
+}
+
+### 6. Mở khóa
+PATCH {{baseUrl}}/api/users/{{accountId}}/status
+Content-Type: application/json
+
+{
+  "status": "active"
+}
+
+### 7. Đặt mật khẩu tạm — bắt buộc đổi mật khẩu ở lần dùng sau
+POST {{baseUrl}}/api/users/{{accountId}}/reset-password
+
+### 8. Lịch sử đăng nhập
+GET {{baseUrl}}/api/users/{{accountId}}/login-history?page=1&pageSize=20
+
+### 9. Xóa mềm / khôi phục
+DELETE {{baseUrl}}/api/users/{{accountId}}
+
+### 10. Khôi phục tài khoản
+PATCH {{baseUrl}}/api/users/{{accountId}}/restore
