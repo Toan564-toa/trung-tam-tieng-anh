@@ -375,3 +375,22 @@ nếu quyết định cũ sai thì thêm quyết định mới ghi "thay thế D
 ## D-035: Tìm kiếm tiếng Việt dùng `ttnn_unaccent(lower(...))` (P5) [ĐÃ CHỐT]
 - Ngày / Phase: 2026-10-09, P5.
 - Pattern chuẩn cho mọi tìm kiếm không dấu: `ttnn_unaccent(lower(concat_ws(' ', <cột>))) LIKE '%' || ttnn_unaccent(lower(<từ khoá>)) || '%'`. `lower()` trả `text` nên chỉ cần overload `text` của `ttnn_unaccent`. Sửa lỗi chính tả `tnnn_unaccent` (3 chữ n) gây lỗi 42883 ở `students.service.ts`.
+
+## D-036: Dữ liệu nhạy cảm không ghi audit_logs (P5, sửa lỗi rà soát) [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-10, P5.
+- Bối cảnh: rà soát P5 phát hiện CCCD (`identityNo`) được ghi **dạng rõ** vào `audit_logs.newData/oldData` ở `me.service.ts` (duyệt yêu cầu đổi hồ sơ) và `students.service.ts` (tạo/sửa/xoá mềm/khôi phục học viên) — vi phạm BR-12 và comment trên cột `students.identity_no` ("không bao giờ ghi vào audit_logs").
+- Đã chọn: tạo `studentAuditDto()` (bỏ `identityNo` khỏi DTO ghi audit) cho mọi `writeAudit` của module students; `reviewChangeRequest` chỉ ghi `{ fieldName }` khi trường thuộc tập nhạy cảm (`SENSITIVE_AUDIT_FIELDS`). Giá trị CCCD vẫn được lưu trong `profile_change_requests` (bảng riêng, chỉ staff/admin đọc được) và áp dụng khi duyệt — chỉ không đi vào audit.
+- Hệ quả: test profiles/students kiểm tra audit không chứa giá trị CCCD.
+
+## D-037: Transaction timeout 15s cho các thao tác nhiều query (P5, sửa lỗi rà soát) [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-10, P5.
+- Bối cảnh: database dev/test là PostgreSQL cloud (~0,5–1s mỗi query). Transaction mặc định 5s của Prisma hết hạn (lỗi `P2028`) khi một request chạy 6–8 query trong transaction — tái tạo được trong isolation, làm `npm run check` đỏ ở `PATCH /api/me/profile`.
+- Đã chọn: helper `runInTx()` với `{ timeout: 15_000 }` thay `prisma.$transaction(fn)` ở `me.service.ts`, `teachers.service.ts`, `staff.service.ts` (pattern đã có ở `students.service.ts`). `updateMyProfile` chuyển `readMyProfile`/`avatarUrlOf` ra ngoài transaction và bỏ `findProfileRecord` trùng để giảm query trong tx.
+- Hệ quả: `PATCH /api/me/profile` và các endpoint CRUD giáo viên/nhân viên không còn hết timeout trên DB từ xa.
+
+## D-038: Thống nhất audit `recordId` theo bản ghi hồ sơ + lọc specialty/position/department (P5) [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-10, P5.
+- `recordId` trong audit_logs của thao tác duyệt yêu cầu đổi hồ sơ là **id bản ghi hồ sơ** (student/teacher/staff), nhất quán với thao tác sửa trực tiếp (trước đó ghi userId). Tra profile id trong transaction qua `profileRecordId()`.
+- Bổ sung bộ lọc theo hợp đồng C.5.5: `specialty` cho `/api/teachers`, `position`/`department` cho `/api/staff` (LIKE không phân biệt dấu).
+- Bỏ `branchId` khỏi `createStaffSchema` — model `staff` không có cột `branchId` (trước đó schema nhận nhưng service silently drop).
+- Hệ quả: test profiles/students cập nhật expect `recordId`; test teachers/staff thêm test lọc.

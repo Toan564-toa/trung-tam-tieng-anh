@@ -11,6 +11,12 @@ import type {
   UpdateTeacherInput,
 } from './teachers.schema';
 
+// Database dev/test là PostgreSQL từ xa (~0,5–1s mỗi query). Transaction
+// nhiều query dễ vượt timeout mặc định 5s của Prisma, nên đặt 15s.
+function runInTx<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+  return prisma.$transaction(fn, { timeout: 15_000 });
+}
+
 const teacherSelect = {
   id: true,
   userId: true,
@@ -96,6 +102,9 @@ export async function listTeachers(q: ListTeachersQuery) {
   ];
   if (q.status) predicates.push(Prisma.sql`t.status = ${q.status}::"PersonStatus"`);
   if (q.showOnWebsite) predicates.push(Prisma.sql`t.show_on_website = ${q.showOnWebsite === 'true'}`);
+  if (q.specialty)
+    predicates.push(Prisma.sql`ttnn_unaccent(lower(t.specialty))
+      LIKE '%' || ttnn_unaccent(lower(${q.specialty})) || '%'`);
   if (q.query)
     predicates.push(Prisma.sql`ttnn_unaccent(lower(concat_ws(' ', t.teacher_code, t.full_name, t.email, t.phone)))
       LIKE '%' || ttnn_unaccent(lower(${q.query})) || '%'`);
@@ -136,7 +145,7 @@ export async function getTeacher(id: number) {
 }
 
 export async function createTeacher(input: CreateTeacherInput, actorId: number, ip?: string) {
-  return prisma.$transaction(async (tx) => {
+  return runInTx(async (tx) => {
     const teacherCode = await nextTeacherCode(tx);
     let userId: number | null = null;
     let temporaryPassword: string | null = null;
@@ -194,7 +203,7 @@ export async function createTeacher(input: CreateTeacherInput, actorId: number, 
 }
 
 export async function updateTeacher(id: number, input: UpdateTeacherInput, actorId: number, ip?: string) {
-  return prisma.$transaction(async (tx) => {
+  return runInTx(async (tx) => {
     const old = await tx.teacher.findUnique({ where: { id }, select: teacherSelect });
     if (!old || old.deletedAt) throw HttpError.notFound('Không tìm thấy giáo viên');
 
@@ -224,7 +233,7 @@ export async function updateTeacher(id: number, input: UpdateTeacherInput, actor
 }
 
 export async function setTeacherStatus(id: number, input: TeacherStatusInput, actorId: number, ip?: string) {
-  return prisma.$transaction(async (tx) => {
+  return runInTx(async (tx) => {
     const old = await tx.teacher.findUnique({ where: { id }, select: teacherSelect });
     if (!old || old.deletedAt) throw HttpError.notFound('Không tìm thấy giáo viên');
     const updated = await tx.teacher.update({ where: { id }, data: { status: input.status }, select: teacherSelect });
@@ -238,7 +247,7 @@ export async function setTeacherStatus(id: number, input: TeacherStatusInput, ac
 
 // Xóa mềm giáo viên: ẩn hồ sơ và vô hiệu tài khoản liên kết (nếu có) trong cùng transaction.
 export async function softDeleteTeacher(id: number, actorId: number, ip?: string) {
-  return prisma.$transaction(async (tx) => {
+  return runInTx(async (tx) => {
     const old = await tx.teacher.findUnique({ where: { id }, select: teacherSelect });
     if (!old || old.deletedAt) throw HttpError.notFound('Không tìm thấy giáo viên');
 
@@ -263,7 +272,7 @@ export async function softDeleteTeacher(id: number, actorId: number, ip?: string
 }
 
 export async function restoreTeacher(id: number, actorId: number, ip?: string) {
-  return prisma.$transaction(async (tx) => {
+  return runInTx(async (tx) => {
     const old = await tx.teacher.findUnique({ where: { id }, select: teacherSelect });
     if (!old || !old.deletedAt) throw HttpError.notFound('Không tìm thấy giáo viên đã xóa');
 
@@ -306,7 +315,7 @@ export async function resetTeacherPassword(id: number, actorId: number, ip?: str
 
 // Gắn ảnh đại diện đã upload (upload qua module files trước).
 export async function updateTeacherPhoto(id: number, fileId: number, actorId: number, ip?: string) {
-  return prisma.$transaction(async (tx) => {
+  return runInTx(async (tx) => {
     const old = await tx.teacher.findUnique({ where: { id }, select: teacherSelect });
     if (!old || old.deletedAt) throw HttpError.notFound('Không tìm thấy giáo viên');
     const file = await tx.file.findUnique({ where: { id: fileId }, select: { id: true, ownerType: true, ownerId: true } });

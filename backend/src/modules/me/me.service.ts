@@ -17,6 +17,15 @@ export interface Caller {
   roles: string[];
 }
 
+// Database dev/test là PostgreSQL từ xa (~0,5–1s mỗi query). Transaction
+// nhiều query dễ vượt timeout mặc định 5s của Prisma, nên đặt 15s.
+function runInTx<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+  return prisma.$transaction(fn, { timeout: 15_000 });
+}
+
+// Trường nhạy cảm: giá trị không bao giờ ghi vào audit_logs (BR-12).
+const SENSITIVE_AUDIT_FIELDS = new Set(['identityNo']);
+
 // ---------- DTO ----------
 
 // DTO hồ sơ học viên tái dùng từ module students (không duplicate).
@@ -239,7 +248,7 @@ export async function updateMyProfile(caller: Caller, input: UpdateProfileInput)
     }
   }
 
-  return prisma.$transaction(async (tx) => {
+  const changeRequests = await runInTx(async (tx) => {
     const profile = await findProfileRecord(tx, role, caller.id);
     if (!profile) throw HttpError.notFound('Không tìm thấy hồ sơ của bạn');
 
@@ -271,14 +280,16 @@ export async function updateMyProfile(caller: Caller, input: UpdateProfileInput)
       });
       changeRequests.push(request);
     }
-
-    const freshProfile = await findProfileRecord(tx, role, caller.id);
-    return {
-      profile: freshProfile ? await readMyProfile(tx, role, caller.id) : null,
-      appliedFields: Object.keys(applied),
-      pendingRequests: changeRequests,
-    };
+    return changeRequests;
   });
+
+  // Đọc lại hồ sơ ngoài transaction: giảm số query trong tx, tránh vượt
+  // timeout trên database từ xa (~0,5–1s mỗi query).
+  return {
+    profile: await readMyProfile(role, caller.id),
+    appliedFields: Object.keys(applied),
+    pendingRequests: changeRequests,
+  };
 }
 
 // Đọc giá trị hiện tại của các trường nhạy cảm (chuỗi hoá để so sánh/ghi log).
@@ -342,9 +353,9 @@ async function applyDirectFields(
   return tx.staff.update({ where: { id: profileId }, data, select: { id: true } });
 }
 
-async function readMyProfile(tx: Prisma.TransactionClient, role: string, userId: number) {
+async function readMyProfile(role: string, userId: number) {
   if (role === 'student') {
-    const student = await tx.student.findFirst({
+    const student = await prisma.student.findFirst({
       where: { userId, deletedAt: null },
       select: studentProfileSelect,
     });
@@ -352,14 +363,14 @@ async function readMyProfile(tx: Prisma.TransactionClient, role: string, userId:
     return studentProfileDto(student, await avatarUrlOf(userId));
   }
   if (role === 'teacher') {
-    const teacher = await tx.teacher.findFirst({
+    const teacher = await prisma.teacher.findFirst({
       where: { userId, deletedAt: null },
       select: teacherProfileSelect,
     });
     if (!teacher) throw HttpError.notFound('Không tìm thấy hồ sơ giáo viên');
     return teacherProfileDto(teacher, await avatarUrlOf(userId));
   }
-  const staff = await tx.staff.findFirst({
+  const staff = await prisma.staff.findFirst({
     where: { userId, deletedAt: null },
     select: staffProfileSelect,
   });
@@ -473,18 +484,40 @@ async function applyApprovedChange(
   throw HttpError.badRequest('Bảng không hỗ trợ duyệt yêu cầu');
 }
 
+// Định danh bản ghi hồ sơ theo bảng và user id — để audit ghi
+// recordId là id bản ghi hồ sơ, nhất quán với thao tác sửa trực tiếp.
+async function profileRecordId(
+  tx: Prisma.TransactionClient,
+  tableName: string,
+  userId: number,
+): Promise<number | null> {
+  const where = { userId, deletedAt: null };
+  if (tableName === 'students') {
+    return (await tx.student.findFirst({ where, select: { id: true } }))?.id ?? null;
+  }
+  if (tableName === 'teachers') {
+    return (await tx.teacher.findFirst({ where, select: { id: true } }))?.id ?? null;
+  }
+  if (tableName === 'staff') {
+    return (await tx.staff.findFirst({ where, select: { id: true } }))?.id ?? null;
+  }
+  return null;
+}
+
 export async function reviewChangeRequest(
   requestId: number,
   input: ReviewChangeInput,
   reviewer: Caller,
   ip?: string,
 ) {
-  return prisma.$transaction(async (tx) => {
+  return runInTx(async (tx) => {
     const request = await tx.profileChangeRequest.findUnique({
       where: { id: requestId },
     });
     if (!request) throw HttpError.notFound('Không tìm thấy yêu cầu đổi hồ sơ');
     if (request.status !== 'PENDING') throw HttpError.conflict('Yêu cầu đã được xử lý');
+
+    const recordId = (await profileRecordId(tx, request.tableName, request.userId)) ?? request.userId;
 
     const updated = await tx.profileChangeRequest.update({
       where: { id: requestId },
@@ -497,13 +530,19 @@ export async function reviewChangeRequest(
 
     if (input.action === 'approve') {
       await applyApprovedChange(tx, request);
+      // Trường nhạy cảm (identityNo): chỉ ghi tên trường, KHÔNG ghi giá trị
+      // vào audit_logs — dữ liệu cá nhân nhạy cảm không ghi log/audit (BR-12).
+      const newData: Record<string, unknown> = { fieldName: request.fieldName };
+      if (!SENSITIVE_AUDIT_FIELDS.has(request.fieldName)) {
+        newData.newValue = request.newValue;
+      }
       await writeAudit(
         {
           userId: reviewer.id,
           action: 'approve',
           tableName: request.tableName,
-          recordId: request.userId,
-          newData: { fieldName: request.fieldName, newValue: request.newValue },
+          recordId,
+          newData,
           ip,
         },
         tx,
@@ -514,7 +553,7 @@ export async function reviewChangeRequest(
           userId: reviewer.id,
           action: 'reject',
           tableName: request.tableName,
-          recordId: request.userId,
+          recordId,
           newData: { fieldName: request.fieldName },
           ip,
         },

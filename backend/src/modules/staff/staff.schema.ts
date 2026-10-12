@@ -6,6 +6,8 @@ const email = z.string().trim().email('Email không hợp lệ').max(200).option
 export const listStaffQuery = z.object({
   query: z.string().trim().max(100).optional(),
   status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
+  position: z.string().trim().max(150).optional(),
+  department: z.string().trim().max(150).optional(),
   onlyDeleted: z.enum(['true', 'false']).default('false'),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
@@ -21,7 +23,6 @@ export const createStaffSchema = z.object({
   education: z.string().trim().max(300).optional().nullable(),
   bio: z.string().trim().max(2000).optional().nullable(),
   startDate: z.coerce.date().optional().nullable(),
-  branchId: z.number().int().positive().optional().nullable(),
   account: z.object({ username: z.string().trim().min(3).max(100) }).optional(),
 });
 

@@ -51,6 +51,16 @@ describe('GET /api/staff', () => {
     expect(inactive.body.data.items[0].staffCode).toBe('NV260002');
   });
 
+  it('lọc theo vị trí và phòng ban', async () => {
+    const position = await request(app()).get('/api/staff?position=Tư vấn').set('Cookie', adminCookie);
+    expect(position.body.data.total).toBe(1);
+    expect(position.body.data.items[0].staffCode).toBe('NV260001');
+
+    const department = await request(app()).get('/api/staff?department=Tuyển sinh').set('Cookie', adminCookie);
+    expect(department.body.data.total).toBe(1);
+    expect(department.body.data.items[0].staffCode).toBe('NV260001');
+  });
+
   it('không trả passwordHash hay trường nội bộ', async () => {
     const res = await request(app()).get('/api/staff').set('Cookie', adminCookie);
     const body = JSON.stringify(res.body);

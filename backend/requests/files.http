@@ -1,0 +1,56 @@
+### REST Client của VS Code. Chạy sau auth.http (đã đăng nhập).
+### Upload kiểm tra loại theo nội dung (magic bytes), giới hạn dung lượng
+### (FILE_MAX_SIZE_MB, mặc định 5MB), đổi tên ngẫu nhiên khi lưu.
+### Chỉ nhận ảnh (PNG/JPEG/GIF/WEBP) và PDF.
+
+@baseUrl = http://localhost:4000
+
+### 1. Upload tệp gắn vào học viên (admin/staff; giáo viên chỉ gắn được tệp của mình)
+POST {{baseUrl}}/api/files/upload
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="file"; filename="photo.png"
+Content-Type: image/png
+
+<noi dung file png>
+--boundary
+Content-Disposition: form-data; name="ownerType"
+
+student
+--boundary
+Content-Disposition: form-data; name="ownerId"
+
+1
+--boundary--
+
+### 2. Upload tệp chung (admin/staff, không gắn đối tượng)
+POST {{baseUrl}}/api/files/upload
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="file"; filename="tai-lieu.pdf"
+Content-Type: application/pdf
+
+<noi dung file pdf>
+--boundary--
+
+### 3. Tải tệp về (kiểm tra quyền sở hữu trong service)
+GET {{baseUrl}}/api/files/1
+
+### 4. Ảnh giáo viên công khai (chỉ giáo viên showOnWebsite=true)
+GET {{baseUrl}}/api/public/files/1
+
+### 5. Loại tệp không được phép -> 400 INVALID_FILE_TYPE
+POST {{baseUrl}}/api/files/upload
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="file"; filename="script.exe"
+Content-Type: application/octet-stream
+
+<noi dung file>
+--boundary--
+
+### 6. Chưa đăng nhập -> 401
+GET {{baseUrl}}/api/files/1

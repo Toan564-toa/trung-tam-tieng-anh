@@ -1,0 +1,79 @@
+### REST Client của VS Code. Chạy sau auth.http (đã đăng nhập admin).
+### Mọi endpoint /api/teachers yêu cầu vai trò admin (vai trò khác -> 403).
+
+@baseUrl = http://localhost:4000
+
+### 1. Danh sách giáo viên, phân trang mặc định 20
+GET {{baseUrl}}/api/teachers
+
+### 2. Tìm theo tên/mã/email/điện thoại (không phân biệt dấu)
+GET {{baseUrl}}/api/teachers?query=giao
+
+### 3. Lọc theo trạng thái / hiển thị website / chuyên môn
+GET {{baseUrl}}/api/teachers?status=ACTIVE&showOnWebsite=true&specialty=Anh
+
+### 4. Chỉ bản ghi đã xoá mềm
+GET {{baseUrl}}/api/teachers?onlyDeleted=true
+
+### 5. Tạo giáo viên không kèm tài khoản
+# @name createTeacher
+POST {{baseUrl}}/api/teachers
+Content-Type: application/json
+
+{
+  "fullName": "Giáo viên Một",
+  "phone": "0912345678",
+  "specialty": "Tiếng Anh",
+  "startDate": "2026-01-05",
+  "showOnWebsite": true
+}
+
+### 6. Tạo giáo viên kèm tài khoản (mật khẩu tạm chỉ trả về một lần)
+POST {{baseUrl}}/api/teachers
+Content-Type: application/json
+
+{
+  "fullName": "Giáo viên Hai",
+  "account": { "username": "gv01" }
+}
+
+### 7. Chi tiết một giáo viên
+GET {{baseUrl}}/api/teachers/{{createTeacher.response.body.data.id}}
+
+### 8. Sửa giáo viên
+PATCH {{baseUrl}}/api/teachers/{{createTeacher.response.body.data.id}}
+Content-Type: application/json
+
+{ "bio": "Dạy tiếng Anh 5 năm" }
+
+### 9. Đổi trạng thái
+PATCH {{baseUrl}}/api/teachers/{{createTeacher.response.body.data.id}}/status
+Content-Type: application/json
+
+{ "status": "INACTIVE" }
+
+### 10. Đặt lại mật khẩu (trả mật khẩu tạm một lần)
+POST {{baseUrl}}/api/teachers/{{createTeacher.response.body.data.id}}/reset-password
+
+### 11. Upload ảnh đại diện (upload qua module files rồi gắn fileId)
+POST {{baseUrl}}/api/teachers/{{createTeacher.response.body.data.id}}/photo
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="file"; filename="avatar.png"
+Content-Type: image/png
+
+<noi dung file png>
+--boundary--
+
+### 12. Xoá mềm -> 204 (ẩn khỏi danh sách, vô hiệu tài khoản liên kết)
+DELETE {{baseUrl}}/api/teachers/{{createTeacher.response.body.data.id}}
+
+### 13. Khôi phục bản ghi đã xoá mềm
+PATCH {{baseUrl}}/api/teachers/{{createTeacher.response.body.data.id}}/restore
+
+### 14. Xuất Excel danh sách giáo viên
+GET {{baseUrl}}/api/teachers/export
+
+### 15. id không hợp lệ -> 400
+GET {{baseUrl}}/api/teachers/abc

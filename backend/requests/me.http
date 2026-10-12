@@ -1,0 +1,69 @@
+### REST Client của VS Code. Chạy sau auth.http (đã đăng nhập).
+### /api/me/* dùng được cho mọi vai trò; /api/profile-change-requests chỉ admin/staff.
+
+@baseUrl = http://localhost:4000
+
+### 1. Xem hồ sơ của mình (role + profile theo vai trò)
+GET {{baseUrl}}/api/me/profile
+
+### 2. Sửa trực tiếp phone/email/address (học viên)
+PATCH {{baseUrl}}/api/me/profile
+Content-Type: application/json
+
+{
+  "phone": "0900000099",
+  "address": "Hà Nội"
+}
+
+### 3. Sửa fullName/identityNo -> tạo yêu cầu duyệt, không áp dụng ngay
+PATCH {{baseUrl}}/api/me/profile
+Content-Type: application/json
+
+{
+  "fullName": "Nguyễn Văn B",
+  "identityNo": "012345678901"
+}
+
+### 4. Upload ảnh đại diện (multipart, field "file")
+POST {{baseUrl}}/api/me/photo
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="file"; filename="avatar.png"
+Content-Type: image/png
+
+<noi dung file png>
+--boundary--
+
+### 5. Danh sách yêu cầu đổi hồ sơ của mình
+GET {{baseUrl}}/api/me/profile-change-requests
+
+### 6. Danh sách yêu cầu chung (admin/staff), lọc theo trạng thái
+GET {{baseUrl}}/api/profile-change-requests?status=PENDING
+
+### 7. Duyệt yêu cầu (admin/staff)
+PATCH {{baseUrl}}/api/profile-change-requests/1
+Content-Type: application/json
+
+{ "action": "approve" }
+
+### 8. Từ chối yêu cầu
+PATCH {{baseUrl}}/api/profile-change-requests/1
+Content-Type: application/json
+
+{ "action": "reject" }
+
+### 9. action không hợp lệ -> 400
+PATCH {{baseUrl}}/api/profile-change-requests/1
+Content-Type: application/json
+
+{ "action": "delete" }
+
+### 10. Học viên duyệt yêu cầu -> 403
+PATCH {{baseUrl}}/api/profile-change-requests/1
+Content-Type: application/json
+
+{ "action": "approve" }
+
+### 11. Chưa đăng nhập -> 401
+GET {{baseUrl}}/api/me/profile

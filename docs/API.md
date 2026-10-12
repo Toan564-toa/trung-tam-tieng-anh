@@ -43,8 +43,8 @@
 | 8 | `POST /api/users/import` | admin | Nhập Excel tài khoản | users | chưa có |
 | 9 | `GET/POST /api/students` | staff, admin | Quản lý học viên | students | **đã có (P2)** |
 | 10 | `GET /api/students/:id` | student(đúng người), staff, admin | Hồ sơ học viên | students | **đã có (P2, staff+admin)** |
-| 11 | `GET/POST /api/teachers` | admin | Quản lý giáo viên | teachers | chưa có |
-| 12 | `GET/POST /api/staff` | admin | Quản lý nhân viên | staff | chưa có |
+| 11 | `GET/POST /api/teachers` | admin | Quản lý giáo viên | teachers | **đã có (P5)** |
+| 12 | `GET/POST /api/staff` | admin | Quản lý nhân viên | staff | **đã có (P5)** |
 | 13 | `GET/POST /api/courses` | admin | Khóa học | courses | chưa có |
 | 14 | `GET/POST /api/classes` | staff, admin | Lớp học | classes | chưa có |
 | 15 | `GET/POST /api/rooms` | admin | Phòng học | rooms | chưa có |
@@ -231,6 +231,66 @@ Content-Type: application/json
 - Body `PATCH`: `{ "status"?, "note"? }`
 - Lỗi: 400 `VALIDATION_ERROR`, 403 `FORBIDDEN`, 404 `NOT_FOUND`.
 
+### Hồ sơ cá nhân `/api/me` (P5)
+- Quyền: mọi vai trò đăng nhập (`authenticate`).
+- `GET /api/me/profile`: trả `{ "data": { "role", "profile" } }`; `role` là `student` | `teacher` | `staff`
+  (có hồ sơ vai trò) hoặc `account` (chỉ có tài khoản); `profile` là DTO hồ sơ tương ứng kèm `avatarUrl`.
+- `PATCH /api/me/profile`: trường trực tiếp áp dụng ngay (`phone/email/address/occupation` của học viên;
+  `bio` của giáo viên/nhân viên); trường nhạy cảm (`fullName`, `identityNo`, `certificate`, `position`,
+  `department`...) **không áp dụng ngay** mà tạo bản ghi `profile_change_requests` status `PENDING`.
+  Thành công 200: `{ "data": { "profile", "appliedFields": [...], "pendingRequests": [...] } }`.
+- `POST /api/me/photo`: upload ảnh đại diện (multipart field `file`), gắn vào `users.avatar_file_id`.
+- `GET /api/me/profile-change-requests`: danh sách yêu cầu của chính mình.
+- Lỗi: 400 `VALIDATION_ERROR` / `FIELD_NOT_EDITABLE`, 401 `UNAUTHENTICATED`, 404 `NOT_FOUND`.
+- File gọi thử: `backend/requests/me.http`.
+
+### Yêu cầu đổi hồ sơ `/api/profile-change-requests` (P5)
+- Quyền: `admin`, `staff` (vai trò khác -> 403).
+- `GET /api/profile-change-requests?status=PENDING|APPROVED|REJECTED&page=&pageSize=`: danh sách chung
+  kèm thông tin người dùng (`user.username`).
+- `PATCH /api/profile-change-requests/:id`: body `{ "action": "approve" | "reject" }`.
+  Duyệt `approve` áp dụng giá trị mới vào hồ sơ; `reject` giữ nguyên. Yêu cầu đã xử lý -> 409.
+- Quy tắc: mọi duyệt/từ chối đều ghi `audit_logs`; **giá trị trường nhạy cảm (CCCD) không bao giờ
+  ghi vào audit** — chỉ ghi tên trường (BR-12).
+- File gọi thử: `backend/requests/me.http`.
+
+### Tệp `/api/files` (P5)
+- Quyền: đăng nhập (`authenticate`); quyền cụ thể kiểm tra trong service theo dữ liệu.
+- `POST /api/files/upload` (multipart field `file`, tuỳ chọn `ownerType`/`ownerId`):
+  kiểm tra loại tệp **theo nội dung** (magic bytes — không tin header/phần mở rộng từ client),
+  chỉ nhận PNG/JPEG/GIF/WEBP/PDF; giới hạn dung lượng `FILE_MAX_SIZE_MB` (mặc định 5MB);
+  đổi tên ngẫu nhiên (`storageKey`) khi lưu; lưu checksum SHA-256. Lớp storage trừu tượng
+  (mặc định đĩa cục bộ `FILE_STORAGE_DIR`) — có thể đổi sang S3 mà không sửa controller.
+  Thành công 201: `{ "data": { "id", "url", "originalName", "mimeType", "size", "checksum", "ownerType", "ownerId", "createdAt" } }`.
+- `GET /api/files/:id`: tải tệp về; kiểm tra quyền sở hữu (học viên chỉ xem tệp của mình,
+  giáo viên xem tệp học viên lớp mình, admin/staff xem tất cả).
+- `GET /api/public/files/:id`: **công khai**, chỉ ảnh giáo viên `showOnWebsite=true` (landing page).
+- Lỗi: 400 `VALID_FILE_TYPE` / `FILE_TOO_LARGE` / `FILE_MISSING`, 401 `UNAUTHENTICATED`, 403 `FORBIDDEN`, 404 `NOT_FOUND`.
+- File gọi thử: `backend/requests/files.http`.
+
+### Giáo viên `/api/teachers` (P5)
+- Quyền: `admin` (vai trò khác -> 403).
+- `GET /api/teachers?query=&status=ACTIVE|INACTIVE&showOnWebsite=true|false&specialty=&onlyDeleted=false&page=&pageSize=`:
+  tìm không phân biệt dấu (mã/tên/email/điện thoại), lọc chuyên môn, đếm số lớp và sĩ số học viên.
+- `POST /api/teachers`: tạo giáo viên, tuỳ chọn `account: { username }` để tạo kèm tài khoản
+  (mật khẩu tạm sinh ngẫu nhiên, **chỉ trả về một lần** trong `temporaryPassword`, DB chỉ lưu Argon2 hash).
+- `PATCH /api/teachers/:id`, `PATCH /api/teachers/:id/status`, `PATCH /api/teachers/:id/restore`,
+  `POST /api/teachers/:id/reset-password` (trả mật khẩu tạm một lần), `POST /api/teachers/:id/photo`
+  (upload ảnh qua module files rồi gắn fileId), `DELETE /api/teachers/:id` (xoá mềm, vô hiệu tài khoản liên kết).
+- `GET /api/teachers/export`: xuất Excel (exceljs).
+- Mọi tạo/sửa/xoá/đổi trạng thái/đặt lại mật khẩu đều ghi `audit_logs`.
+- File gọi thử: `backend/requests/teachers.http`.
+
+### Nhân viên `/api/staff` (P5)
+- Quyền: `admin` (vai trò khác -> 403).
+- `GET /api/staff?query=&status=ACTIVE|INACTIVE&position=&department=&onlyDeleted=false&page=&pageSize=`:
+  tìm không phân biệt dấu, lọc vị trí/phòng ban, đếm số học viên phụ trách (advisor).
+- `POST /api/staff`, `PATCH /api/staff/:id`, `PATCH /api/staff/:id/status`, `PATCH /api/staff/:id/restore`,
+  `POST /api/staff/:id/reset-password`, `POST /api/staff/:id/photo`, `DELETE /api/staff/:id` (xoá mềm):
+  tương tự giáo viên. Model `staff` **không có** `branchId` (khác teacher).
+- `GET /api/staff/export`: xuất Excel (exceljs).
+- File gọi thử: `backend/requests/staff.http`.
+
 ### Điểm lệch với hợp đồng P1 (giữ nguyên hiện thực P2, xử lý ở P8/P9/P16)
 - Điểm danh: P1 dự kiến `PUT /api/classes/:classId/sessions/:sessionId/attendance`, P2 dùng
   `PUT /api/attendance/sessions/:sessionId`. Sẽ chốt lại khi có module `classes` (P8).
@@ -264,3 +324,4 @@ Content-Type: application/json
 | 2026-10-04 | — | Tạo khung tài liệu | P0 |
 | 2026-10-04 | toàn bộ | Bổ sung nhóm 31–57 theo kiểm kê màn hình; chốt quy ước `/api/me` và mã trạng thái (D-009, D-010, D-013) | P1 |
 | 2026-10-05 | auth, students, attendance, leads | Thêm mục **1c**: 14 endpoint đã hiện thực kèm body, mã lỗi và quy tắc; ghi nhận 3 điểm lệch với P1 | P2 |
+| 2026-10-10 | me, profile-change-requests, files, teachers, staff | Thêm mục **1c** P5: hồ sơ cá nhân, yêu cầu đổi hồ sơ, upload/tệp, CRUD giáo viên/nhân viên; cập nhật hàng 11/12 bảng mục 1; thêm `backend/requests/{me,files,teachers,staff}.http` | P5 |

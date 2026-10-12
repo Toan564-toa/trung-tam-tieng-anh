@@ -1,0 +1,79 @@
+### REST Client của VS Code. Chạy sau auth.http (đã đăng nhập admin).
+### Mọi endpoint /api/staff yêu cầu vai trò admin (vai trò khác -> 403).
+
+@baseUrl = http://localhost:4000
+
+### 1. Danh sách nhân viên, phân trang mặc định 20
+GET {{baseUrl}}/api/staff
+
+### 2. Tìm theo tên/mã/email/điện thoại (không phân biệt dấu)
+GET {{baseUrl}}/api/staff?query=nhan
+
+### 3. Lọc theo trạng thái / vị trí / phòng ban
+GET {{baseUrl}}/api/staff?status=ACTIVE&position=Tư vấn&department=Tuyển sinh
+
+### 4. Chỉ bản ghi đã xoá mềm
+GET {{baseUrl}}/api/staff?onlyDeleted=true
+
+### 5. Tạo nhân viên không kèm tài khoản
+# @name createStaff
+POST {{baseUrl}}/api/staff
+Content-Type: application/json
+
+{
+  "fullName": "Nhân viên Một",
+  "phone": "0912345678",
+  "position": "Tư vấn",
+  "department": "Tuyển sinh",
+  "startDate": "2026-01-05"
+}
+
+### 6. Tạo nhân viên kèm tài khoản (mật khẩu tạm chỉ trả về một lần)
+POST {{baseUrl}}/api/staff
+Content-Type: application/json
+
+{
+  "fullName": "Nhân viên Hai",
+  "account": { "username": "nv01" }
+}
+
+### 7. Chi tiết một nhân viên
+GET {{baseUrl}}/api/staff/{{createStaff.response.body.data.id}}
+
+### 8. Sửa nhân viên
+PATCH {{baseUrl}}/api/staff/{{createStaff.response.body.data.id}}
+Content-Type: application/json
+
+{ "bio": "Kinh nghiệm tuyển sinh 3 năm" }
+
+### 9. Đổi trạng thái
+PATCH {{baseUrl}}/api/staff/{{createStaff.response.body.data.id}}/status
+Content-Type: application/json
+
+{ "status": "INACTIVE" }
+
+### 10. Đặt lại mật khẩu (trả mật khẩu tạm một lần)
+POST {{baseUrl}}/api/staff/{{createStaff.response.body.data.id}}/reset-password
+
+### 11. Upload ảnh đại diện (upload qua module files rồi gắn fileId)
+POST {{baseUrl}}/api/staff/{{createStaff.response.body.data.id}}/photo
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="file"; filename="avatar.png"
+Content-Type: image/png
+
+<noi dung file png>
+--boundary--
+
+### 12. Xoá mềm -> 204 (ẩn khỏi danh sách, vô hiệu tài khoản liên kết)
+DELETE {{baseUrl}}/api/staff/{{createStaff.response.body.data.id}}
+
+### 13. Khôi phục bản ghi đã xoá mềm
+PATCH {{baseUrl}}/api/staff/{{createStaff.response.body.data.id}}/restore
+
+### 14. Xuất Excel danh sách nhân viên
+GET {{baseUrl}}/api/staff/export
+
+### 15. id không hợp lệ -> 400
+GET {{baseUrl}}/api/staff/abc

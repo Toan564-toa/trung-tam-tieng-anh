@@ -7,6 +7,7 @@ export const listTeachersQuery = z.object({
   query: z.string().trim().max(100).optional(),
   status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
   showOnWebsite: z.enum(['true', 'false']).optional(),
+  specialty: z.string().trim().max(200).optional(),
   onlyDeleted: z.enum(['true', 'false']).default('false'),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),

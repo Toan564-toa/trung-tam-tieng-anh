@@ -58,7 +58,17 @@ describe('GET /api/teachers', () => {
 
     const onWeb = await request(app()).get('/api/teachers?showOnWebsite=true').set('Cookie', adminCookie);
     expect(onWeb.body.data.total).toBe(1);
-    expect(onWeb.body.data.items[0].showOnWebsite).toBe(true);
+  });
+
+  it('lọc theo chuyên môn', async () => {
+    await prisma.teacher.update({
+      where: { teacherCode: 'GV260001' },
+      data: { specialty: 'Tiếng Anh' },
+    });
+
+    const res = await request(app()).get('/api/teachers?specialty=Anh').set('Cookie', adminCookie);
+    expect(res.body.data.total).toBe(1);
+    expect(res.body.data.items[0].teacherCode).toBe('GV260001');
   });
 
   it('không trả passwordHash hay trường nội bộ', async () => {

@@ -11,6 +11,12 @@ import type {
   UpdateStaffInput,
 } from './staff.schema';
 
+// Database dev/test là PostgreSQL từ xa (~0,5–1s mỗi query). Transaction
+// nhiều query dễ vượt timeout mặc định 5s của Prisma, nên đặt 15s.
+function runInTx<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+  return prisma.$transaction(fn, { timeout: 15_000 });
+}
+
 const staffSelect = {
   id: true,
   userId: true,
@@ -83,6 +89,12 @@ export async function listStaff(q: ListStaffQuery) {
     q.onlyDeleted === 'true' ? Prisma.sql`s.deleted_at IS NOT NULL` : Prisma.sql`s.deleted_at IS NULL`,
   ];
   if (q.status) predicates.push(Prisma.sql`s.status = ${q.status}::"PersonStatus"`);
+  if (q.position)
+    predicates.push(Prisma.sql`ttnn_unaccent(lower(s.position))
+      LIKE '%' || ttnn_unaccent(lower(${q.position})) || '%'`);
+  if (q.department)
+    predicates.push(Prisma.sql`ttnn_unaccent(lower(s.department))
+      LIKE '%' || ttnn_unaccent(lower(${q.department})) || '%'`);
   if (q.query)
     predicates.push(Prisma.sql`ttnn_unaccent(lower(concat_ws(' ', s.staff_code, s.full_name, s.email, s.phone)))
       LIKE '%' || ttnn_unaccent(lower(${q.query})) || '%'`);
@@ -117,7 +129,7 @@ export async function getStaff(id: number) {
 }
 
 export async function createStaff(input: CreateStaffInput, actorId: number, ip?: string) {
-  return prisma.$transaction(async (tx) => {
+  return runInTx(async (tx) => {
     const staffCode = await nextStaffCode(tx);
     let userId: number | null = null;
     let temporaryPassword: string | null = null;
@@ -172,7 +184,7 @@ export async function createStaff(input: CreateStaffInput, actorId: number, ip?:
 }
 
 export async function updateStaff(id: number, input: UpdateStaffInput, actorId: number, ip?: string) {
-  return prisma.$transaction(async (tx) => {
+  return runInTx(async (tx) => {
     const old = await tx.staff.findUnique({ where: { id }, select: staffSelect });
     if (!old || old.deletedAt) throw HttpError.notFound('Không tìm thấy nhân viên');
 
@@ -199,7 +211,7 @@ export async function updateStaff(id: number, input: UpdateStaffInput, actorId: 
 }
 
 export async function setStaffStatus(id: number, input: StaffStatusInput, actorId: number, ip?: string) {
-  return prisma.$transaction(async (tx) => {
+  return runInTx(async (tx) => {
     const old = await tx.staff.findUnique({ where: { id }, select: staffSelect });
     if (!old || old.deletedAt) throw HttpError.notFound('Không tìm thấy nhân viên');
     const updated = await tx.staff.update({ where: { id }, data: { status: input.status }, select: staffSelect });
@@ -213,7 +225,7 @@ export async function setStaffStatus(id: number, input: StaffStatusInput, actorI
 
 // Xóa mềm nhân viên: ẩn hồ sơ và vô hiệu tài khoản liên kết (nếu có) trong cùng transaction.
 export async function softDeleteStaff(id: number, actorId: number, ip?: string) {
-  return prisma.$transaction(async (tx) => {
+  return runInTx(async (tx) => {
     const old = await tx.staff.findUnique({ where: { id }, select: staffSelect });
     if (!old || old.deletedAt) throw HttpError.notFound('Không tìm thấy nhân viên');
 
@@ -234,7 +246,7 @@ export async function softDeleteStaff(id: number, actorId: number, ip?: string) 
 }
 
 export async function restoreStaff(id: number, actorId: number, ip?: string) {
-  return prisma.$transaction(async (tx) => {
+  return runInTx(async (tx) => {
     const old = await tx.staff.findUnique({ where: { id }, select: staffSelect });
     if (!old || !old.deletedAt) throw HttpError.notFound('Không tìm thấy nhân viên đã xóa');
 
@@ -277,7 +289,7 @@ export async function resetStaffPassword(id: number, actorId: number, ip?: strin
 
 // Gắn ảnh đại diện đã upload (upload qua module files trước).
 export async function updateStaffPhoto(id: number, fileId: number, actorId: number, ip?: string) {
-  return prisma.$transaction(async (tx) => {
+  return runInTx(async (tx) => {
     const old = await tx.staff.findUnique({ where: { id }, select: staffSelect });
     if (!old || old.deletedAt) throw HttpError.notFound('Không tìm thấy nhân viên');
     const file = await tx.file.findUnique({ where: { id: fileId }, select: { id: true, ownerType: true, ownerId: true } });

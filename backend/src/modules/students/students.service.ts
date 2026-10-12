@@ -128,6 +128,13 @@ export function studentProfileDto(profile: StudentProfile, avatarUrl: string | n
   };
 }
 
+// DTO dùng để ghi audit_logs: bỏ `identityNo` — dữ liệu cá nhân nhạy cảm
+// không được ghi vào log/audit (BR-12; comment trên cột students.identity_no).
+function studentAuditDto(profile: StudentProfile) {
+  const { identityNo: _identityNo, ...rest } = studentProfileDto(profile, null);
+  return rest;
+}
+
 // DTO cho giáo viên: giống hồ sơ đầy đủ nhưng KHÔNG có identityNo (dữ liệu nhạy cảm).
 export function studentClassViewDto(profile: StudentProfile, avatarUrl: string | null) {
   const dto = studentProfileDto(profile, avatarUrl);
@@ -319,7 +326,7 @@ export async function createStudent(input: CreateStudentInput, actorId: number, 
       select: studentProfileSelect,
     });
     await writeAudit(
-      { userId: actorId, action: 'create', tableName: 'students', recordId: student.id, newData: studentProfileDto(student, null), ip },
+      { userId: actorId, action: 'create', tableName: 'students', recordId: student.id, newData: studentAuditDto(student), ip },
       tx,
     );
     return studentProfileDto(student, null);
@@ -345,7 +352,7 @@ export async function updateStudent(id: number, input: UpdateStudentInput, actor
       select: studentProfileSelect,
     });
     await writeAudit(
-      { userId: actorId, action: 'update', tableName: 'students', recordId: id, oldData: studentProfileDto(old, null), newData: studentProfileDto(updated, null), ip },
+      { userId: actorId, action: 'update', tableName: 'students', recordId: id, oldData: studentAuditDto(old), newData: studentAuditDto(updated), ip },
       tx,
     );
     return studentProfileDto(updated, null);
@@ -394,7 +401,7 @@ export async function softDeleteStudent(id: number, actorId: number, ip?: string
     if (!old) throw HttpError.notFound('Không tìm thấy học viên');
 
     await tx.student.update({ where: { id }, data: { deletedAt: new Date() } });
-    await writeAudit({ userId: actorId, action: 'delete', tableName: 'students', recordId: id, oldData: studentProfileDto(old, null), ip }, tx);
+    await writeAudit({ userId: actorId, action: 'delete', tableName: 'students', recordId: id, oldData: studentAuditDto(old), ip }, tx);
   });
 }
 
@@ -412,7 +419,7 @@ export async function restoreStudent(id: number, actorId: number, ip?: string) {
       select: studentProfileSelect,
     });
     await writeAudit(
-      { userId: actorId, action: 'restore', tableName: 'students', recordId: id, newData: studentProfileDto(updated, null), ip },
+      { userId: actorId, action: 'restore', tableName: 'students', recordId: id, newData: studentAuditDto(updated), ip },
       tx,
     );
     return studentProfileDto(updated, null);

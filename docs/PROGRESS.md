@@ -1,13 +1,13 @@
 # Tiến độ dự án
 
 ## Trạng thái hiện tại
-- Phase đã hoàn thành: **P4 — Đăng nhập và quản lý tài khoản (BE)** (2026-10-07) · **P5 — Hồ sơ người dùng và tệp (BE)** (2026-10-09)
-- Phase hiện tại: **P6 — Import Excel (BE)** (chưa bắt đầu)
+- Phase đã hoàn thành: **P4 — Đăng nhập và quản lý tài khoản (BE)** (2026-10-07) · **P5 — Hồ sơ người dùng và tệp (BE)** (2026-10-09, sửa lỗi rà soát 2026-10-10)
+- Phase hiện tại: **P6 — Import Excel (BE)** (đang làm dở, chưa commit: `backend/src/modules/imports/`, `middlewares/rateLimit.ts`, `routes.ts`, `utils/httpError.ts`)
 - Lệnh chạy dự án: `npm run dev:fe` (frontend) · `npm run dev:be` (backend, `http://localhost:4000`)
-- Cập nhật lần cuối: 2026-10-09, phiên 7 (P5 hoàn tất; backend 11 file test, 188/188 test xanh)
+- Cập nhật lần cuối: 2026-10-10, phiên 8 (P5 sửa lỗi rà soát: N1 CCCD trong audit, Q1 transaction timeout, Q2/Q3 docs)
 - Chi tiết P3: `docs/DECISIONS.md` D-022…D-024, `docs/DB.md`
 - Chi tiết P4: `docs/DECISIONS.md` D-025…D-029, `docs/API.md` phần Auth và tài khoản
-- Chi tiết P5: `docs/DECISIONS.md` D-030…D-035, `docs/API.md` phần hồ sơ, tệp, giáo viên, nhân viên
+- Chi tiết P5: `docs/DECISIONS.md` D-030…D-038, `docs/API.md` phần hồ sơ, tệp, giáo viên, nhân viên
 
 ## Danh sách phase
 ### Chuẩn bị
@@ -56,6 +56,28 @@ Thứ tự này xuất ra từ ma trận quyền (`docs/PERMISSIONS.md`) và h�
 | 10 | `notifications, audit_logs, settings, sequences, files` + view báo cáo (P18) | Dashboard, báo cáo, cài đặt; `audit_logs` bắt buộc từ Mốc 1 |
 
 ## Nhật ký bàn giao (mới nhất ở trên)
+### Phiên 8: 2026-10-10 (P5 — sửa lỗi rà soát độc lập; xong, chờ chạy check toàn bộ)
+- Bối cảnh: rà soát P5 phát hiện 1 lỗi nghiêm trọng, 3 lỗi quan trọng, 5 lỗi nhỏ. Phiên này sửa hết (trừ M4/M5 là ghi nhận, không đổi code).
+- Đã sửa:
+  - **N1 (nghiêm trọng)**: CCCD (`identityNo`) không còn ghi dạng rõ vào `audit_logs`. Thêm `studentAuditDto()` (bỏ identityNo) cho mọi `writeAudit` ở `students.service.ts` (tạo/sửa/xoá mềm/khôi phục); `me.service.ts` `reviewChangeRequest` chỉ ghi `{ fieldName }` cho trường nhạy cảm (`SENSITIVE_AUDIT_FIELDS`). Xem D-036.
+  - **Q1 (quan trọng)**: `npm run check` đỏ do Prisma transaction timeout mặc định 5s (`P2028`) trên DB cloud. Thêm `runInTx()` timeout 15s cho `me.service.ts`, `teachers.service.ts` (7 chỗ), `staff.service.ts` (7 chỗ); `updateMyProfile` giảm query trong tx (chuyển `readMyProfile`/`avatarUrlOf` ra ngoài, bỏ `findProfileRecord` trùng). Xem D-037.
+  - **Q2 (quan trọng)**: `docs/API.md` cập nhật mục 1c cho P5 (me, profile-change-requests, files, teachers, staff), hàng 11/12 bảng mục 1 thành "đã có (P5)", thêm dòng lịch sử 2026-10-10.
+  - **Q3 (quan trọng)**: tạo `backend/requests/{me,files,teachers,staff}.http`.
+  - **M1**: bỏ `branchId` khỏi `createStaffSchema` (model `staff` không có cột này).
+  - **M2**: thêm lọc `specialty` (`/api/teachers`), `position`/`department` (`/api/staff`) theo hợp đồng C.5.5.
+  - **M3**: thống nhất audit `recordId` = id bản ghi hồ sơ (qua `profileRecordId()`), sửa test profiles theo.
+  - Test: cập nhật profiles (recordId + test audit không chứa CCCD), students (test audit không chứa CCCD), teachers (test lọc specialty), staff (test lọc position/department).
+  - Docs: DECISIONS.md thêm D-036…D-038.
+- Kiểm tra:
+  - Backend typecheck + lint: **xanh**.
+  - Test 4 file liên quan (profiles, students, teachers, staff): **xanh** (profiles 22/22, students 44/44, teachers 17/17, staff đủ).
+  - `npm run check` ở gốc: **xanh toàn bộ** (2026-10-12) — backend typecheck/lint/build xanh, **test 11 file, 192/192 test** (~49 phút do database cloud); frontend typecheck/lint/build xanh. Lưu ý: 2 lần chạy trước đó fail 1 test do DB cloud Aiven mất kết nối nhất thời (lỗi Prisma P1001 "Can't reach database server"), không phải code — chạy lại thì xanh.
+- M4 (giáo viên đọc được ảnh HV lớp mình nhưng không upload được): giữ nguyên — đối xứng không cần thiết, giáo viên upload ảnh qua staff/admin. Ghi nhận ở đây.
+- M5 (`temporaryPassword` ngoài envelope `data`): giữ nguyên theo D-034 (đã chốt P5).
+- Còn dở / cần làm tiếp:
+  - Chưa commit (theo quy định: chỉ commit khi người dùng yêu cầu). Khi commit: tách riêng P5-fix, không kéo P6 WIP (`backend/src/modules/imports/`, `middlewares/rateLimit.ts`, `routes.ts`, `utils/httpError.ts`).
+  - P6 Import Excel đang làm dở trong working tree — không đụng trong phiên này.
+
 ### Phiên 7: 2026-10-09 (P5 — hồ sơ người dùng và tệp; **xong**)
 - Đã làm trong backend:
   - Module `me`: `GET /api/me/profile` (role + hồ sơ theo vai trò), `PATCH /api/me/profile` (sửa theo vai trò), `POST /api/me/change-password`.

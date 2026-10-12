@@ -99,6 +99,39 @@ describe('POST /api/students', () => {
     expect(log).not.toBeNull();
   });
 
+  it('audit nhật ký tạo/sửa không chứa giá trị CCCD', async () => {
+    const created = await request(app())
+      .post('/api/students')
+      .set('Cookie', staffCookie)
+      .send({ fullName: 'Nguyễn Văn A', identityNo: '012345678901' });
+
+    expect(created.status).toBe(201);
+    const createLog = await prisma.auditLog.findFirst({
+      where: { action: 'create', tableName: 'students', recordId: String(created.body.data.id) },
+    });
+    expect(createLog).not.toBeNull();
+    expect(JSON.stringify(createLog?.newData)).not.toContain('012345678901');
+
+    // Nhân viên chỉ sửa được học viên mình phụ trách (advisor).
+    await prisma.student.update({
+      where: { id: created.body.data.id },
+      data: { advisorId: staffRecordId },
+    });
+
+    const updated = await request(app())
+      .patch(`/api/students/${created.body.data.id}`)
+      .set('Cookie', staffCookie)
+      .send({ identityNo: '098765432109' });
+
+    expect(updated.status).toBe(200);
+    const updateLog = await prisma.auditLog.findFirst({
+      where: { action: 'update', tableName: 'students', recordId: String(created.body.data.id) },
+    });
+    expect(updateLog).not.toBeNull();
+    expect(JSON.stringify(updateLog?.oldData)).not.toContain('012345678901');
+    expect(JSON.stringify(updateLog?.newData)).not.toContain('098765432109');
+  });
+
   it('không trả passwordHash hay trường nội bộ của user', async () => {
     const res = await request(app())
       .post('/api/students')

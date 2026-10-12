@@ -181,13 +181,12 @@ describe('PATCH /api/me/profile', () => {
 });
 
 describe('Yêu cầu đổi hồ sơ (profile_change_requests)', () => {
-  let userId: number;
   let studentId: number;
   let requestId: number;
+  let identityRequestId: number;
 
   beforeEach(async () => {
-    const { user, student } = await createStudentUser('HV260001', 'Nguyễn Văn A', 'stu01');
-    userId = user.id;
+    const { student } = await createStudentUser('HV260001', 'Nguyễn Văn A', 'stu01');
     studentId = student.id;
     const cookie = await loginAs('stu01');
 
@@ -197,6 +196,7 @@ describe('Yêu cầu đổi hồ sơ (profile_change_requests)', () => {
       .send({ fullName: 'Nguyễn Văn B', identityNo: '012345678901' });
 
     requestId = res.body.data.pendingRequests[0].id;
+    identityRequestId = res.body.data.pendingRequests[1].id;
   });
 
   it('chủ sở hữu thấy danh sách yêu cầu của mình', async () => {
@@ -255,9 +255,28 @@ describe('Yêu cầu đổi hồ sơ (profile_change_requests)', () => {
     expect(student.fullName).toBe('Nguyễn Văn B');
 
     const log = await prisma.auditLog.findFirst({
-      where: { action: 'approve', tableName: 'students', recordId: String(userId) },
+      where: { action: 'approve', tableName: 'students', recordId: String(studentId) },
     });
     expect(log).not.toBeNull();
+  });
+
+  it('duyệt yêu cầu đổi CCCD: audit ghi tên trường, không ghi giá trị CCCD', async () => {
+    const res = await request(app())
+      .patch(`/api/profile-change-requests/${identityRequestId}`)
+      .set('Cookie', staffCookie)
+      .send({ action: 'approve' });
+
+    expect(res.status).toBe(200);
+
+    const student = await prisma.student.findUniqueOrThrow({ where: { id: studentId } });
+    expect(student.identityNo).toBe('012345678901');
+
+    const log = await prisma.auditLog.findFirst({
+      where: { action: 'approve', tableName: 'students', recordId: String(studentId) },
+    });
+    expect(log).not.toBeNull();
+    expect(log?.newData).toEqual({ fieldName: 'identityNo' });
+    expect(JSON.stringify(log?.newData)).not.toContain('012345678901');
   });
 
   it('từ chối: giữ nguyên giá trị cũ và ghi audit', async () => {
@@ -273,7 +292,7 @@ describe('Yêu cầu đổi hồ sơ (profile_change_requests)', () => {
     expect(student.fullName).toBe('Nguyễn Văn A');
 
     const log = await prisma.auditLog.findFirst({
-      where: { action: 'reject', tableName: 'students', recordId: String(userId) },
+      where: { action: 'reject', tableName: 'students', recordId: String(studentId) },
     });
     expect(log).not.toBeNull();
   });
