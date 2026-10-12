@@ -1,0 +1,64 @@
+### REST Client của VS Code. Chạy sau auth.http (đã đăng nhập admin).
+### Mọi endpoint /api/imports yêu cầu vai trò admin (vai trò khác -> 403).
+### Giới hạn 10 lần/giờ (importLimiter) — thao tác nặng.
+
+@baseUrl = http://localhost:4000
+
+### 1. Tải mẫu nhập học viên (Excel, tiêu đề tiếng Việt + ví dụ)
+GET {{baseUrl}}/api/imports/templates/students
+
+### 2. Tải mẫu giáo viên / nhân viên
+GET {{baseUrl}}/api/imports/templates/teachers
+GET {{baseUrl}}/api/imports/templates/staff
+
+### 3. Tạo lô nhập (multipart, field "file"; kind qua query hoặc form field)
+# @name createImport
+POST {{baseUrl}}/api/imports?kind=student
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="file"; filename="danh-sach.xlsx"
+Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+
+<noi dung file xlsx>
+--boundary--
+
+### 4. Xem trước lô nhập (phân trang, lọc trạng thái PENDING|VALID|ERROR|CREATED)
+GET {{baseUrl}}/api/imports/{{createImport.response.body.data.batchId}}
+GET {{baseUrl}}/api/imports/{{createImport.response.body.data.batchId}}?status=ERROR
+
+### 5. Xác nhận nhập: tạo user + hồ sơ + vai trò trong một transaction
+# @name confirmImport
+POST {{baseUrl}}/api/imports/{{createImport.response.body.data.batchId}}/confirm
+Content-Type: application/json
+
+{ "skipErrors": false }
+
+### 6. Bỏ qua dòng lỗi khi xác nhận
+POST {{baseUrl}}/api/imports/{{createImport.response.body.data.batchId}}/confirm
+Content-Type: application/json
+
+{ "skipErrors": true }
+
+### 7. Tải danh sách tài khoản + mật khẩu tạm (token một lần, hết hạn 15 phút)
+POST {{baseUrl}}/api/imports/{{createImport.response.body.data.batchId}}/credentials
+Content-Type: application/json
+
+{ "token": "{{confirmImport.response.body.data.credentialsToken}}" }
+
+### 8. Lô không tồn tại -> 404
+GET {{baseUrl}}/api/imports/999999
+
+### 9. File không phải Excel -> 400 INVALID_FILE_TYPE
+POST {{baseUrl}}/api/imports?kind=student
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="file"; filename="file.txt"
+Content-Type: text/plain
+
+<noi dung text>
+--boundary--
+
+### 10. Nhân viên/giáo viên không phải admin -> 403
+GET {{baseUrl}}/api/imports/templates/students

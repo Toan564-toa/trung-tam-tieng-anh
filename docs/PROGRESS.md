@@ -1,13 +1,14 @@
 # Tiến độ dự án
 
 ## Trạng thái hiện tại
-- Phase đã hoàn thành: **P4 — Đăng nhập và quản lý tài khoản (BE)** (2026-10-07) · **P5 — Hồ sơ người dùng và tệp (BE)** (2026-10-09, sửa lỗi rà soát 2026-10-10)
-- Phase hiện tại: **P6 — Import Excel (BE)** (đang làm dở, chưa commit: `backend/src/modules/imports/`, `middlewares/rateLimit.ts`, `routes.ts`, `utils/httpError.ts`)
+- Phase đã hoàn thành: **P4** (2026-10-07) · **P5** (2026-10-09, sửa rà soát 2026-10-10) · **P6 — Import Excel (BE)** (2026-10-12)
+- Phase hiện tại: **P7 — NỐI #1** (chưa bắt đầu)
 - Lệnh chạy dự án: `npm run dev:fe` (frontend) · `npm run dev:be` (backend, `http://localhost:4000`)
-- Cập nhật lần cuối: 2026-10-10, phiên 8 (P5 sửa lỗi rà soát: N1 CCCD trong audit, Q1 transaction timeout, Q2/Q3 docs)
+- Cập nhật lần cuối: 2026-10-12, phiên 9 (P6 Import Excel: template, upload+validate, preview, confirm, credentials một lần)
 - Chi tiết P3: `docs/DECISIONS.md` D-022…D-024, `docs/DB.md`
 - Chi tiết P4: `docs/DECISIONS.md` D-025…D-029, `docs/API.md` phần Auth và tài khoản
 - Chi tiết P5: `docs/DECISIONS.md` D-030…D-038, `docs/API.md` phần hồ sơ, tệp, giáo viên, nhân viên
+- Chi tiết P6: `docs/DECISIONS.md` D-039…D-040, `docs/API.md` phần nhập Excel
 
 ## Danh sách phase
 ### Chuẩn bị
@@ -18,7 +19,7 @@
 ### Mốc 1: Đăng nhập, tài khoản, hồ sơ, import
 - [x] P4 Đăng nhập và quản lý tài khoản (BE) — **xong 2026-10-07** (xem nhật ký phiên 6)
 - [x] P5 Hồ sơ người dùng và tệp (BE) — **xong 2026-10-09** (xem nhật ký phiên 7)
-- [ ] P6 Import Excel (BE)
+- [x] P6 Import Excel (BE) — **xong 2026-10-12** (xem nhật ký phiên 9)
 - [ ] P7 NỐI #1: đăng nhập, tài khoản, hồ sơ, import
 ### Mốc 2: Lớp học và điểm danh
 - [ ] P8 Khóa học, lớp, buổi học, ghi danh (BE)
@@ -56,7 +57,27 @@ Thứ tự này xuất ra từ ma trận quyền (`docs/PERMISSIONS.md`) và h�
 | 10 | `notifications, audit_logs, settings, sequences, files` + view báo cáo (P18) | Dashboard, báo cáo, cài đặt; `audit_logs` bắt buộc từ Mốc 1 |
 
 ## Nhật ký bàn giao (mới nhất ở trên)
-### Phiên 8: 2026-10-10 (P5 — sửa lỗi rà soát độc lập; xong, chờ chạy check toàn bộ)
+### Phiên 9: 2026-10-12 (P6 — Import Excel BE; **xong**, `npm run check` xanh)
+- Đã làm trong backend:
+  - Module `imports` (hoàn thiện WIP có sẵn): `GET /api/imports/templates/:type` (Excel mẫu, tiêu đề tiếng Việt + ví dụ), `POST /api/imports` (multipart, đọc xlsx, ánh xạ cột tiếng Việt, chuẩn hóa sđt/ngày/giới tính, validate zod từng dòng, phát hiện trùng mã/sđt trong file và hệ thống, lưu `import_batches`/`import_rows`), `GET /api/imports/:id` (preview phân trang, lọc trạng thái), `POST /api/imports/:id/confirm` (tạo User + hồ sơ + vai trò trong một transaction, timeout tỉ lệ số dòng), `POST /api/imports/:id/credentials` (Excel tài khoản + mật khẩu tạm, token một lần hết hạn 15 phút, lưu trong bộ nhớ).
+  - `importLimiter` (10 lần/giờ, nới 100k khi test); mount `/api/imports`; `HttpError.gone()` (410) và `notFound`/`conflict` nhận code tùy chỉnh.
+  - Fix service: `findUniqueOrThrow` (P2025 thành 500) → `findUnique` + 404 ở `getPreview`/`confirmImport`; transaction `confirmImport` thêm timeout `30s + 200ms/dòng` (argon2 ~100ms/dòng, tối đa 1000 dòng) tránh P2028.
+  - Test mới: `tests/imports.test.ts` (25 test: template, upload hợp lệ/lỗi/trùng, preview, confirm tạo user/hồ sơ/vai trò/audit, suffix username, skipErrors, credentials một lần, phân quyền admin-only).
+  - Docs: `docs/API.md` mục 1c P6 + hàng 34; `backend/requests/imports.http`; DECISIONS D-039, D-040.
+- Kiểm tra:
+  - Backend typecheck + lint: **xanh**.
+  - `tests/imports.test.ts`: **29/29 xanh** (DB cloud chậm, ~6 phút).
+  - `npm run check` ở gốc: **xanh toàn bộ** — backend 12 file / 221 test passed, build OK; frontend typecheck/lint/build OK (2026-10-12).
+- Sửa lỗi tìm được qua test:
+  - `parseImportDate` dùng giờ local → Prisma ghi cột `date` lệch 1 ngày (UTC+7). Đổi sang `Date.UTC`.
+  - `createAccount` bắt P2002 rồi retry trong cùng transaction → PG abort transaction (25P02). Đổi sang `findUnique` trước khi create.
+  - Controller `createImport`: `req.body` có thể undefined khi request không có body → `req.body?.kind`.
+- Quyết định: D-039 (validate trước — confirm sau), D-040 (token credentials trong bộ nhớ, không lưu DB).
+- Còn dở / cần làm tiếp:
+  - **Đã xong**. Chưa commit (theo quy định: chỉ commit khi người dùng yêu cầu).
+  - Tiếp theo: P7 NỐI #1 (đăng nhập, tài khoản, hồ sơ, import).
+
+### Phiên 8: 2026-10-10 (P5 — sửa lỗi rà soát độc lập; xong, `npm run check` xanh)
 - Bối cảnh: rà soát P5 phát hiện 1 lỗi nghiêm trọng, 3 lỗi quan trọng, 5 lỗi nhỏ. Phiên này sửa hết (trừ M4/M5 là ghi nhận, không đổi code).
 - Đã sửa:
   - **N1 (nghiêm trọng)**: CCCD (`identityNo`) không còn ghi dạng rõ vào `audit_logs`. Thêm `studentAuditDto()` (bỏ identityNo) cho mọi `writeAudit` ở `students.service.ts` (tạo/sửa/xoá mềm/khôi phục); `me.service.ts` `reviewChangeRequest` chỉ ghi `{ fieldName }` cho trường nhạy cảm (`SENSITIVE_AUDIT_FIELDS`). Xem D-036.

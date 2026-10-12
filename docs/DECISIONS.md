@@ -394,3 +394,16 @@ nếu quyết định cũ sai thì thêm quyết định mới ghi "thay thế D
 - Bổ sung bộ lọc theo hợp đồng C.5.5: `specialty` cho `/api/teachers`, `position`/`department` cho `/api/staff` (LIKE không phân biệt dấu).
 - Bỏ `branchId` khỏi `createStaffSchema` — model `staff` không có cột `branchId` (trước đó schema nhận nhưng service silently drop).
 - Hệ quả: test profiles/students cập nhật expect `recordId`; test teachers/staff thêm test lọc.
+
+## D-039: Nhập Excel — validate trước, tạo tài khoản khi confirm (P6) [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-12, P6.
+- Hai bước: (1) `POST /api/imports` chỉ đọc file, chuẩn hóa, validate từng dòng (zod), phát hiện trùng mã/sđt trong file và trong hệ thống, lưu `import_batches`/`import_rows` — **chưa tạo tài khoản**; (2) `POST /api/imports/:id/confirm` mới tạo User + hồ sơ + vai trò trong **một transaction**. Admin xem trước và sửa file trước khi chạm DB người dùng.
+- Tên đăng nhập sinh từ họ tên (bỏ dấu, thường, `nguyen.van.a`); trùng thì tự suffix `2`, `3`... (bắt P2002 rồi thử lại).
+- Mật khẩu tạm sinh ngẫu nhiên 12 ký tự, đặt `mustChangePassword=true`, **chỉ lưu Argon2 hash** (D-034).
+- Timeout transaction tỉ lệ với số dòng (`30s + 200ms/dòng`, tối đa 10 phút) vì argon2 ~100ms/dòng — tránh P2028 trên DB từ xa.
+
+## D-040: Token credentials một lần, lưu trong bộ nhớ (P6) [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-12, P6.
+- `POST /api/imports/:id/credentials` trả Excel danh sách tài khoản + mật khẩu tạm. Token ngẫu nhiên 256-bit, **dùng một lần**, hết hạn 15 phút, lưu trong `Map` bộ nhớ service (không vào DB, log, audit). Sai token -> 404; đã dùng -> 409; hết hạn -> 410.
+- Hệ quả: restart server mất token chưa dùng (admin phải xác nhận lại không được — lô đã COMPLETED; chấp nhận vì mật khẩu chỉ cần tải ngay sau khi nhập). Không lưu mật khẩu dạng rõ ở bất kỳ đâu (BR-12).
+- Lý do: bảng `import_credentials` sẽ phải lưu mật khẩu dạng rõ hoặc mã hóa reversible — đều vi phạm "không lưu mật khẩu dạng rõ"; trong bộ nhớ là an toàn nhất cho dữ liệu nhất thời.

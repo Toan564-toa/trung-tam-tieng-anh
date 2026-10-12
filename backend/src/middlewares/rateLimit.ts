@@ -43,3 +43,13 @@ export const publicFormLimiter = rateLimit({
   legacyHeaders: false,
   message,
 });
+
+// Import Excel: thao tác nặng (đọc file, tạo nhiều bản ghi) nên giới hạn riêng,
+// chặt hơn hạn chung. Chỉ admin dùng (kiểm tra vai trò ở route).
+export const importLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: real(10),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message,
+});

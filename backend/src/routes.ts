@@ -3,6 +3,7 @@ import { accountsRoutes } from './modules/accounts/accounts.routes';
 import { attendanceRoutes } from './modules/attendance/attendance.routes';
 import { authRoutes } from './modules/auth/auth.routes';
 import { filesRoutes, publicFilesRoutes } from './modules/files/files.routes';
+import { importsRoutes } from './modules/imports/imports.routes';
 import { leadsRoutes, publicLeadsRoutes } from './modules/leads/leads.routes';
 import { meRoutes, profileChangeRoutes } from './modules/me/me.routes';
 import { staffRoutes } from './modules/staff/staff.routes';
@@ -24,6 +25,7 @@ apiRoutes.use('/teachers', teachersRoutes);
 apiRoutes.use('/staff', staffRoutes);
 apiRoutes.use('/attendance', attendanceRoutes);
 apiRoutes.use('/leads', leadsRoutes);
+apiRoutes.use('/imports', importsRoutes);
 
 // Các module tiếp theo (thêm dần):
 // apiRoutes.use('/classes', classesRoutes);
@@ -31,4 +33,3 @@ apiRoutes.use('/leads', leadsRoutes);
 // apiRoutes.use('/payments', paymentsRoutes);
 // apiRoutes.use('/payroll', payrollRoutes);
 // apiRoutes.use('/posts', postsRoutes);
-// apiRoutes.use('/imports', importsRoutes);

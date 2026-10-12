@@ -17,11 +17,14 @@ export class HttpError extends Error {
   static forbidden(msg = 'Bạn không có quyền thực hiện thao tác này') {
     return new HttpError(403, msg, 'FORBIDDEN');
   }
-  static notFound(msg = 'Không tìm thấy dữ liệu') {
-    return new HttpError(404, msg, 'NOT_FOUND');
+  static notFound(msg = 'Không tìm thấy dữ liệu', code = 'NOT_FOUND') {
+    return new HttpError(404, msg, code);
   }
-  static conflict(msg = 'Dữ liệu bị trùng') {
-    return new HttpError(409, msg, 'CONFLICT');
+  static conflict(msg = 'Dữ liệu bị trùng', code = 'CONFLICT') {
+    return new HttpError(409, msg, code);
+  }
+  static gone(msg = 'Tài nguyên đã hết hạn hoặc không còn khả dụng', code = 'GONE') {
+    return new HttpError(410, msg, code);
   }
   static locked(msg = 'Dữ liệu đã bị khóa, không thể sửa') {
     return new HttpError(423, msg, 'LOCKED');

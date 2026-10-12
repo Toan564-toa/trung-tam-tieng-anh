@@ -72,7 +72,7 @@
 | 31 | `POST /api/auth/request-unlock`, `POST /api/auth/forgot-password` | công khai | Đăng nhập (quên mật khẩu) | auth |
 | 32 | `PATCH /api/users/:id/status`, `POST /api/users/:id/reset-password`, `PATCH /api/users/:id/restore` | admin | Tài khoản & phân quyền | users |
 | 33 | `GET /api/users/export` | admin | Xuất Excel tài khoản | users |
-| 34 | `POST /api/imports/preview`, `POST /api/imports/:id/commit`, `POST /api/imports/:id/credentials`, `GET /api/imports/template` | admin | Nhập Excel | imports |
+| 34 | `GET /api/imports/templates/:type`, `POST /api/imports`, `GET /api/imports/:id`, `POST /api/imports/:id/confirm`, `POST /api/imports/:id/credentials` | admin | Nhập Excel | imports | **đã có (P6)** |
 | 35 | `GET /api/me`, `PATCH /api/me` | mọi vai trò | Thông tin cá nhân (3 khu vực) | profile |
 | 36 | `GET /api/me/summary`, `/api/me/progress`, `/api/me/lessons`, `/api/me/attendance`, `/api/me/attendance-summary`, `/api/me/scores`, `/api/me/scores/summary`, `/api/me/assignments`, `/api/me/tuition`, `/api/me/payments`, `/api/me/calendar`, `/api/me/announcements` | học viên | 7 màn khu học viên | student-self |
 | 37 | `GET /api/me/classes`, `/api/me/students`, `/api/me/schedule`, `/api/me/assessments`, `/api/me/payroll`, `/api/me/overview` | giáo viên | 11 màn khu giáo viên | teacher-self |
@@ -291,6 +291,19 @@ Content-Type: application/json
 - `GET /api/staff/export`: xuất Excel (exceljs).
 - File gọi thử: `backend/requests/staff.http`.
 
+### Nhập Excel `/api/imports` (P6)
+- Quyền: `admin` (vai trò khác -> 403); giới hạn riêng 10 lần/giờ (`importLimiter`).
+- `GET /api/imports/templates/:type` (`:type` = `students|teachers|staff`): tải Excel mẫu — tiêu đề tiếng Việt + 2 dòng ví dụ.
+- `POST /api/imports` (multipart field `file`, `kind` = `student|teacher|staff` qua query hoặc form field): đọc file `.xlsx` (kiểm tra magic bytes `PK`, không tin `Content-Type`), ánh xạ cột tiếng Việt, chuẩn hóa (sđt bỏ khoảng trắng/dấu `+`, ngày `dd/mm/yyyy` hoặc `yyyy-mm-dd`, giới tính Nam/Nữ/Khác), validate từng dòng bằng zod, phát hiện trùng mã/sđt trong file và trong hệ thống. Lưu `import_batches` + `import_rows` (rawData, status `VALID`/`ERROR`, errorMessage). **Chưa tạo tài khoản**. Tối đa 1000 dòng.
+  - Thành công 201: `{ "data": { "batchId", "totalRows", "validRows", "errorRows" } }`.
+  - Lỗi: 400 `NO_FILE`, `INVALID_FILE_TYPE`, `INVALID_EXCEL`, `MISSING_COLUMNS`, `TOO_MANY_ROWS`, `VALIDATION_ERROR`.
+- `GET /api/imports/:id?status=&page=&pageSize=`: bản xem trước phân trang kèm tổng hợp (`validRows`, `errorRows`, `createdRows`). Lô không tồn tại -> 404.
+- `POST /api/imports/:id/confirm` body `{ "skipErrors": false }`: tạo **User + hồ sơ (Student/Teacher/Staff) + vai trò** trong **một transaction** (timeout tỉ lệ số dòng). Tên đăng nhập sinh từ họ tên (bỏ dấu, thường), trùng thì tự suffix `2`, `3`... Mật khẩu tạm sinh ngẫu nhiên, đặt `mustChangePassword=true`, **chỉ lưu Argon2 hash**. Dòng lỗi: `skipErrors=false` -> 409 `HAS_ERROR_ROWS`; `skipErrors=true` bỏ qua. Xác nhận 2 lần -> 409 `ALREADY_CONFIRMED`. Ghi `audit_logs` (`action: 'import'`, `newData: { created, skipped }` — không chứa mật khẩu).
+  - Thành công 200: `{ "data": { "batchId", "created", "skipped", "credentialsToken", "credentialsExpiresAt" } }`.
+- `POST /api/imports/:id/credentials` body `{ "token" }`: tải Excel danh sách **tên đăng nhập + mật khẩu tạm**. Token ngẫu nhiên 256-bit, **dùng một lần**, hết hạn 15 phút, lưu **trong bộ nhớ** (không vào DB/log/audit). Sai token -> 404 `INVALID_TOKEN`; đã dùng -> 409 `TOKEN_USED`; hết hạn -> 410 `TOKEN_EXPIRED`.
+- Quy tắc: mật khẩu tạm không bao giờ ghi DB dạng rõ, log hay audit (BR-12, D-034).
+- File gọi thử: `backend/requests/imports.http`.
+
 ### Điểm lệch với hợp đồng P1 (giữ nguyên hiện thực P2, xử lý ở P8/P9/P16)
 - Điểm danh: P1 dự kiến `PUT /api/classes/:classId/sessions/:sessionId/attendance`, P2 dùng
   `PUT /api/attendance/sessions/:sessionId`. Sẽ chốt lại khi có module `classes` (P8).
@@ -325,3 +338,4 @@ Content-Type: application/json
 | 2026-10-04 | toàn bộ | Bổ sung nhóm 31–57 theo kiểm kê màn hình; chốt quy ước `/api/me` và mã trạng thái (D-009, D-010, D-013) | P1 |
 | 2026-10-05 | auth, students, attendance, leads | Thêm mục **1c**: 14 endpoint đã hiện thực kèm body, mã lỗi và quy tắc; ghi nhận 3 điểm lệch với P1 | P2 |
 | 2026-10-10 | me, profile-change-requests, files, teachers, staff | Thêm mục **1c** P5: hồ sơ cá nhân, yêu cầu đổi hồ sơ, upload/tệp, CRUD giáo viên/nhân viên; cập nhật hàng 11/12 bảng mục 1; thêm `backend/requests/{me,files,teachers,staff}.http` | P5 |
+| 2026-10-12 | imports | Thêm mục **1c** P6: nhập Excel (template, upload+validate, preview, confirm, credentials một lần); cập nhật hàng 34 bảng mục 1b; thêm `backend/requests/imports.http` | P6 |
