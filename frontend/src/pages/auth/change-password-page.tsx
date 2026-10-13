@@ -56,7 +56,13 @@ export function ChangePasswordPage() {
     setSubmitting(false)
     if (!result.ok) return setError(result.error)
     toast.success("Đổi mật khẩu thành công!", { description: "Bạn có thể bắt đầu sử dụng hệ thống." })
-    navigate(ROLE_META[result.user.role].home, { replace: true })
+    // Nhiều vai trò: cho chọn khu vực. Một vai trò: về thẳng trang chủ.
+    const areas = result.user.roles.filter((role) => role in ROLE_META)
+    if (areas.length > 1) {
+      navigate("/chon-khu-vuc", { replace: true })
+      return
+    }
+    navigate(ROLE_META[areas[0] ?? result.user.role].home, { replace: true })
   }
 
   const onLogout = () => {

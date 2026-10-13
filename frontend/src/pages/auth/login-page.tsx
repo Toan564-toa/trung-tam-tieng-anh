@@ -88,7 +88,7 @@ export function LoginPage() {
           <div className="flex flex-col gap-3">
             <DemoRolePicker />
             <p className="text-center text-xs text-ink-soft">
-              Tài khoản mẫu: <b>hocvien</b>, <b>giaovien</b>, <b>nhanvien</b>, <b>hocvienmoi</b> (lần đầu) · mật khẩu <b>123456</b>
+              Tài khoản do trung tâm cấp – vui lòng liên hệ quầy lễ tân để được tạo tài khoản.
             </p>
           </div>
         </motion.div>

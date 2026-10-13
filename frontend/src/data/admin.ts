@@ -23,14 +23,15 @@ export const ADMIN_TODAY_LABEL = "02/10/2026"
  * Tài khoản và phân quyền
  * ------------------------------------------------------------------ */
 
-export type AccountRole = "student" | "teacher" | "staff" | "admin"
+export type AccountRole = "student" | "teacher" | "staff" | "admin" | "guardian"
 export type AccountStatus = "active" | "locked" | "pending" | "archived"
 
-export const ACCOUNT_ROLE_META: Record<AccountRole, { label: string; badge: "info" | "success" | "warning" | "danger"; prefix: string }> = {
+export const ACCOUNT_ROLE_META: Record<AccountRole, { label: string; badge: "info" | "success" | "warning" | "danger" | "neutral"; prefix: string }> = {
   student: { label: "Học viên", badge: "info", prefix: "hv" },
   teacher: { label: "Giáo viên", badge: "success", prefix: "gv" },
   staff: { label: "Nhân viên", badge: "warning", prefix: "nv" },
   admin: { label: "Quản trị", badge: "danger", prefix: "ad" },
+  guardian: { label: "Phụ huynh", badge: "neutral", prefix: "gh" },
 }
 
 export const ACCOUNT_STATUS_META: Record<AccountStatus, { label: string; badge: "success" | "danger" | "warning" | "neutral" }> = {

@@ -103,7 +103,7 @@ export function AdminLoginPage() {
 
           <div className="mt-6 flex flex-col gap-2">
             <DemoRolePicker tone="dark" />
-            <p className="text-center text-xs text-slate-500">Tài khoản mẫu: <b className="text-slate-300">admin</b> / <b className="text-slate-300">admin123</b></p>
+            <p className="text-center text-xs text-slate-500">Tài khoản quản trị do quản trị viên cấp cao tạo.</p>
           </div>
         </motion.div>
       </main>

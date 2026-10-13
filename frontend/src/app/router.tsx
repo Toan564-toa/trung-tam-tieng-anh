@@ -7,9 +7,12 @@ import { ClientLayout } from "@/layouts/client-layout"
 import { AdminLayout } from "@/layouts/admin-layout"
 import { LandingPage } from "@/pages/public/landing-page"
 import { NotFoundPage } from "@/pages/public/not-found-page"
+import { ForbiddenPage } from "@/pages/public/forbidden-page"
 import { LoginPage } from "@/pages/auth/login-page"
 import { AdminLoginPage } from "@/pages/auth/admin-login-page"
 import { ChangePasswordPage } from "@/pages/auth/change-password-page"
+import { AreaChooserPage } from "@/pages/auth/area-chooser-page"
+import { ResetPasswordPage } from "@/pages/auth/reset-password-page"
 import { StudentOverviewPage } from "@/pages/client/student/student-overview-page"
 import { StudentSchedulePage } from "@/pages/client/student/student-schedule-page"
 import { StudentGradesPage } from "@/pages/client/student/student-grades-page"
@@ -85,6 +88,8 @@ export const router = createBrowserRouter([
       // Authentication
       { path: "dang-nhap", element: <LoginPage /> },
       { path: "doi-mat-khau", element: <ChangePasswordPage /> },
+      { path: "dat-lai-mat-khau", element: <ResetPasswordPage /> },
+      { path: "chon-khu-vuc", element: <AreaChooserPage /> },
       { path: "admin/dang-nhap", element: <AdminLoginPage /> },
 
       // Client app (student / teacher / staff)
@@ -180,6 +185,7 @@ export const router = createBrowserRouter([
         ],
       },
 
+      { path: "403", element: <ForbiddenPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
   },

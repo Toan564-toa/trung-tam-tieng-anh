@@ -51,6 +51,7 @@ const NAV_BY_ROLE: Record<Exclude<Role, "admin">, (home: string) => ShellNavItem
     { label: "Bảng lương", to: `${home}/bang-luong`, icon: Wallet },
     { label: "Thông tin cá nhân", to: `${home}/thong-tin-ca-nhan`, icon: Settings },
   ],
+  guardian: () => [],
 }
 
 export function ClientLayout() {

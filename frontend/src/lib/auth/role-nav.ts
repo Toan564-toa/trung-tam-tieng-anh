@@ -6,4 +6,5 @@ export const ROLE_NAV_PATHS: Record<Role, { profile: string }> = {
   teacher: { profile: "/giao-vien/thong-tin-ca-nhan" },
   staff: { profile: "/nhan-vien/thong-tin-ca-nhan" },
   admin: { profile: "/admin" },
+  guardian: { profile: "/" },
 }

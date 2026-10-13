@@ -50,4 +50,5 @@ export const NOTIFICATIONS_BY_ROLE: Record<Role, AppNotification[]> = {
     { id: "an4", title: "3 phiếu giảm giá chờ duyệt", description: "Nhân viên gửi xin duyệt trong ngày 02/10.", time: "2 giờ trước", tone: "info", unread: true, icon: FileText, href: "/admin/hoc-phi" },
     { id: "an5", title: "Bảng lương tháng 10 chờ chốt", description: "Còn 3 nhân sự chưa được chốt lương.", time: "Hôm nay", tone: "warning", unread: true, icon: Megaphone, href: "/admin/bang-luong" },
   ],
+  guardian: [],
 }

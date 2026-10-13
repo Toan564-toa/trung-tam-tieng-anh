@@ -27,6 +27,7 @@ const STATS: Record<ClientRole, Stat[]> = {
     { label: "Học phí chờ thu", value: "8", icon: CreditCard, trend: { text: "3 quá hạn", tone: "warning" }, iconClass: "bg-orange-100 text-warning" },
     { label: "Lớp sắp khai giảng", value: "4", icon: CalendarDays, iconClass: "bg-sky-100 text-sky-700" },
   ],
+  guardian: [],
 }
 
 export function RoleHomePage({ role }: { role: ClientRole }) {
