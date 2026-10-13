@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react"
+import { useState, type FormEvent } from "react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   BadgeCheck,
   BookOpen,
@@ -7,6 +8,7 @@ import {
   CalendarDays,
   CircleCheckBig,
   IdCard,
+  Loader2,
   Mail,
   Pencil,
   Phone,
@@ -29,6 +31,8 @@ import { Input } from "@/components/ui/input"
 import { Modal } from "@/components/ui/modal"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
+import { meApi } from "@/api/me"
+import { errorMessage } from "@/lib/api-error"
 import {
   CENTER_CLASSES,
   STAFF_PROFILE,
@@ -38,11 +42,25 @@ import {
   studentsOfStaff,
 } from "@/data/staff"
 
-type Editable = { phone: string; email: string; bio: string }
+type Editable = { phone: string; email: string; bio: string; position: string; department: string }
 type FormErrors = Partial<Record<keyof Editable, string>>
 
 const PHONE_RE = /^(0|\+84)(3|5|7|8|9)\d{8}$/
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+const REQUEST_STATUS: Record<string, { label: string; badge: "warning" | "success" | "danger" }> = {
+  PENDING: { label: "Chờ duyệt", badge: "warning" },
+  APPROVED: { label: "Đã duyệt", badge: "success" },
+  REJECTED: { label: "Từ chối", badge: "danger" },
+}
+
+const FIELD_LABEL: Record<string, string> = {
+  position: "Chức vụ",
+  department: "Bộ phận",
+  phone: "Số điện thoại",
+  email: "Email",
+  bio: "Giới thiệu",
+}
 
 function validate(v: Editable): FormErrors {
   const errors: FormErrors = {}
@@ -55,17 +73,19 @@ function validate(v: Editable): FormErrors {
   return errors
 }
 
-export function StaffProfilePage() {
-  const [values, setValues] = useState<Editable>({
-    phone: STAFF_PROFILE.phone,
-    email: STAFF_PROFILE.email,
-    bio: STAFF_PROFILE.bio,
-  })
-  const [errors, setErrors] = useState<FormErrors>({})
-  const [open, setOpen] = useState(false)
-  const [dirty, setDirty] = useState(false)
+function formatDate(value: string | null | undefined) {
+  if (!value) return "—"
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString("vi-VN")
+}
 
-  const stats = useMemo(() => {
+export function StaffProfilePage() {
+  const queryClient = useQueryClient()
+  const profileQuery = useQuery({ queryKey: ["me", "profile"], queryFn: meApi.profile })
+  const staff = profileQuery.data?.staff ?? null
+
+  // Thống kê lớp/khách hàng vẫn là dữ liệu mẫu (chưa có API tương ứng).
+  const stats = (() => {
     const classes = CENTER_CLASSES.filter((cls) => cls.staffId === STAFF_PROFILE.id)
     const myLeads = leadsOfStaff(STAFF_PROFILE.id)
     return {
@@ -76,24 +96,75 @@ export function StaffProfilePage() {
       wonLeads: myLeads.filter((lead) => lead.stage === "won").length,
       conversion: leadConversionRate(),
     }
-  }, [])
+  })()
+
+  // Yêu cầu chỉnh sửa gần đây.
+  const requestsQuery = useQuery({
+    queryKey: ["me", "change-requests"],
+    queryFn: () => meApi.myChangeRequests({ pageSize: 5 }),
+  })
+  const requests = requestsQuery.data?.items ?? []
+
+  const [values, setValues] = useState<Editable>({ phone: "", email: "", bio: "", position: "", department: "" })
+  const [errors, setErrors] = useState<FormErrors>({})
+  const [open, setOpen] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+
+  const synced = staff
+    ? {
+        phone: staff.phone ?? "",
+        email: staff.email ?? "",
+        bio: staff.bio ?? "",
+        position: staff.position ?? "",
+        department: staff.department ?? "",
+      }
+    : values
+
+  const openEdit = () => {
+    if (!staff) return
+    setValues({
+      phone: staff.phone ?? "",
+      email: staff.email ?? "",
+      bio: staff.bio ?? "",
+      position: staff.position ?? "",
+      department: staff.department ?? "",
+    })
+    setErrors({})
+    setOpen(true)
+  }
 
   const update = (key: keyof Editable) => (value: string) => {
     setValues((prev) => ({ ...prev, [key]: value }))
-    setDirty(true)
     if (errors[key]) setErrors((prev) => ({ ...prev, [key]: undefined }))
   }
 
-  const onSubmit = () => {
+  const onSubmit = async (e: FormEvent) => {
+    e.preventDefault()
     const found = validate(values)
     setErrors(found)
     if (Object.keys(found).length > 0) {
       toast.error("Vui lòng kiểm tra lại thông tin", { description: "Một số trường chưa hợp lệ." })
       return
     }
-    setOpen(false)
-    setDirty(false)
-    toast.success("Đã lưu thông tin cá nhân!", { description: "Thông tin liên hệ mới sẽ được dùng cho thông báo từ trung tâm." })
+    setSubmitting(true)
+    try {
+      await meApi.updateProfile({
+        phone: values.phone.trim(),
+        email: values.email.trim(),
+        bio: values.bio.trim(),
+        position: values.position.trim(),
+        department: values.department.trim(),
+      })
+      setOpen(false)
+      void queryClient.invalidateQueries({ queryKey: ["me"] })
+      toast.success("Đã lưu thông tin cá nhân!", {
+        description: "SĐT, email, giới thiệu cập nhật ngay. Chức vụ, bộ phận gửi yêu cầu duyệt cho phòng Hành chính.",
+      })
+    } catch (err) {
+      toast.error(errorMessage(err, "Không lưu được thông tin"))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const invalid = (key: keyof Editable) => ({
@@ -104,11 +175,11 @@ export function StaffProfilePage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow={`Mã nhân viên: ${STAFF_PROFILE.id}`}
+        eyebrow={staff ? `Mã nhân viên: NV${String(staff.id).padStart(4, "0")}` : "Hồ sơ cá nhân"}
         title="Hồ sơ cá nhân"
         description="Thông tin cá nhân, bộ phận và các lớp học bạn đang phụ trách."
         actions={
-          <Button onClick={() => setOpen(true)}>
+          <Button onClick={openEdit} disabled={!staff}>
             <Pencil /> Cập nhật hồ sơ
           </Button>
         }
@@ -121,16 +192,16 @@ export function StaffProfilePage() {
               <div className="absolute -top-10 -right-8 size-40 rounded-full bg-white/25" aria-hidden="true" />
             </div>
             <CardContent className="-mt-14 flex flex-col items-center px-6 pb-6 text-center">
-              <SmartImage src={STAFF_PROFILE.avatar} alt={STAFF_PROFILE.fullName} className="size-28 rounded-full ring-4 ring-white" />
-              <h2 className="mt-3 font-heading text-xl font-extrabold text-ink">{STAFF_PROFILE.fullName}</h2>
-              <p className="mt-0.5 text-sm text-ink-soft">{STAFF_PROFILE.position}</p>
+              <SmartImage src={staff?.avatarUrl ?? staff?.photoUrl ?? ""} alt={staff?.fullName ?? "Ảnh đại diện"} className="size-28 rounded-full ring-4 ring-white" />
+              <h2 className="mt-3 font-heading text-xl font-extrabold text-ink">{staff?.fullName ?? "—"}</h2>
+              <p className="mt-0.5 text-sm text-ink-soft">{staff?.position ?? "—"}</p>
               <Badge variant="success" className="mt-3">
                 <BadgeCheck className="size-3.5" /> Đang làm việc
               </Badge>
               <dl className="mt-5 grid w-full gap-3 text-left">
                 <InfoRow icon={School} label="Số lớp phụ trách" value={`${stats.classCount} lớp`} />
                 <InfoRow icon={Users} label="Số học viên phụ trách" value={`${stats.studentCount} học viên`} />
-                <InfoRow icon={CalendarDays} label="Ngày bắt đầu" value={STAFF_PROFILE.startDate} />
+                <InfoRow icon={CalendarDays} label="Ngày bắt đầu" value={formatDate(staff?.startDate)} />
               </dl>
             </CardContent>
           </Card>
@@ -144,24 +215,24 @@ export function StaffProfilePage() {
                   <CardTitle>Thông tin liên hệ</CardTitle>
                   <CardDescription>Bạn có thể tự cập nhật các trường này</CardDescription>
                 </div>
-                {dirty ? <Badge variant="warning">Chưa lưu</Badge> : <Badge variant="success">Đã đồng bộ</Badge>}
+                <Badge variant="success">Đã đồng bộ</Badge>
               </CardHeader>
               <CardContent>
                 <InfoGrid
                   items={[
-                    { icon: UserRound, label: "Họ và tên", value: STAFF_PROFILE.fullName },
-                    { icon: IdCard, label: "Mã nhân viên", value: STAFF_PROFILE.id },
-                    { icon: Phone, label: "Số điện thoại", value: values.phone },
-                    { icon: Mail, label: "Email", value: values.email },
-                    { icon: Building2, label: "Bộ phận", value: STAFF_PROFILE.department },
-                    { icon: Briefcase, label: "Chức vụ", value: STAFF_PROFILE.position },
+                    { icon: UserRound, label: "Họ và tên", value: staff?.fullName ?? "—" },
+                    { icon: IdCard, label: "Mã nhân viên", value: staff ? `NV${String(staff.id).padStart(4, "0")}` : "—" },
+                    { icon: Phone, label: "Số điện thoại", value: synced.phone || "—" },
+                    { icon: Mail, label: "Email", value: synced.email || "—" },
+                    { icon: Building2, label: "Bộ phận", value: synced.department || "—" },
+                    { icon: Briefcase, label: "Chức vụ", value: synced.position || "—" },
                   ]}
                 />
                 <div className="mt-3">
-                  <p className="rounded-xl bg-surface p-3.5 text-sm leading-relaxed text-ink-soft">{values.bio}</p>
+                  <p className="rounded-xl bg-surface p-3.5 text-sm leading-relaxed text-ink-soft">{synced.bio || "—"}</p>
                 </div>
                 <div className="mt-4">
-                  <InfoRow icon={BookOpen} label="Học vấn" value={STAFF_PROFILE.education} />
+                  <InfoRow icon={BookOpen} label="Học vấn" value={staff?.education ?? "—"} />
                 </div>
               </CardContent>
             </Card>
@@ -171,7 +242,7 @@ export function StaffProfilePage() {
             <Card>
               <CardHeader>
                 <CardTitle>Công việc đang phụ trách</CardTitle>
-                <CardDescription>{stats.classCount} lớp · {stats.studentCount} học viên</CardDescription>
+                <CardDescription>{stats.classCount} lớp · {stats.studentCount} học viên · dữ liệu mẫu</CardDescription>
               </CardHeader>
               <CardContent>
                 {stats.classes.length === 0 ? (
@@ -198,8 +269,44 @@ export function StaffProfilePage() {
           <Reveal delay={0.18}>
             <Card>
               <CardHeader>
+                <CardTitle>Yêu cầu chỉnh sửa gần đây</CardTitle>
+                <CardDescription>Chức vụ, bộ phận thay đổi phải qua duyệt</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {requestsQuery.isLoading ? (
+                  <p className="text-sm text-ink-soft">Đang tải…</p>
+                ) : requests.length === 0 ? (
+                  <p className="text-sm text-ink-soft">Chưa có yêu cầu chỉnh sửa nào.</p>
+                ) : (
+                  <ul className="flex flex-col gap-2">
+                    {requests.map((request) => {
+                      const status = REQUEST_STATUS[request.status] ?? REQUEST_STATUS.PENDING
+                      return (
+                        <li key={request.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-surface px-3.5 py-2.5">
+                          <span className="min-w-0">
+                            <span className="block text-sm font-semibold text-ink">{FIELD_LABEL[request.fieldName] ?? request.fieldName}</span>
+                            <span className="block truncate text-xs text-ink-soft">
+                              {request.oldValue ?? "—"} → {request.newValue ?? "—"}
+                            </span>
+                          </span>
+                          <span className="flex items-center gap-2">
+                            <span className="text-xs text-ink-soft">{formatDate(request.createdAt)}</span>
+                            <Badge variant={status.badge}>{status.label}</Badge>
+                          </span>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          </Reveal>
+
+          <Reveal delay={0.24}>
+            <Card>
+              <CardHeader>
                 <CardTitle>Thống kê tư vấn</CardTitle>
-                <CardDescription>Số liệu khách hàng mới và kết quả chốt gần đây</CardDescription>
+                <CardDescription>Số liệu khách hàng mới và kết quả chốt gần đây · dữ liệu mẫu</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid gap-4 sm:grid-cols-3">
@@ -232,24 +339,34 @@ export function StaffProfilePage() {
         open={open}
         onOpenChange={setOpen}
         title="Cập nhật hồ sơ"
-        description="Các thay đổi về chức vụ, bộ phận hoặc học vấn cần gửi yêu cầu riêng tới phòng Hành chính."
+        description="SĐT, email, giới thiệu lưu ngay. Chức vụ, bộ phận gửi yêu cầu duyệt cho phòng Hành chính."
         icon={<Pencil className="size-6" />}
         footer={
           <>
             <Button variant="outline" onClick={() => setOpen(false)}>Hủy bỏ</Button>
-            <Button onClick={onSubmit}>
-              <Save /> Lưu thay đổi
+            <Button onClick={onSubmit} disabled={submitting}>
+              {submitting ? <><Loader2 className="animate-spin" /> Đang lưu...</> : <><Save /> Lưu thay đổi</>}
             </Button>
           </>
         }
       >
-        <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); onSubmit() }} noValidate>
+        <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField id="t-phone" label="Số điện thoại" required error={errors.phone}>
               <Input id="t-phone" type="tel" value={values.phone} onChange={(e) => update("phone")(e.target.value)} placeholder="0909 123 456" {...invalid("phone")} />
             </FormField>
             <FormField id="t-email" label="Email" required error={errors.email}>
               <Input id="t-email" type="email" value={values.email} onChange={(e) => update("email")(e.target.value)} placeholder="email@vidu.com" {...invalid("email")} />
+            </FormField>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField id="t-position" label="Chức vụ" error={errors.position}
+              hint={<span className="text-xs text-warning">Thay đổi cần duyệt</span>}>
+              <Input id="t-position" value={values.position} onChange={(e) => update("position")(e.target.value)} placeholder="Tư vấn" {...invalid("position")} />
+            </FormField>
+            <FormField id="t-department" label="Bộ phận" error={errors.department}
+              hint={<span className="text-xs text-warning">Thay đổi cần duyệt</span>}>
+              <Input id="t-department" value={values.department} onChange={(e) => update("department")(e.target.value)} placeholder="Tuyển sinh" {...invalid("department")} />
             </FormField>
           </div>
           <FormField
@@ -261,7 +378,6 @@ export function StaffProfilePage() {
           >
             <Textarea id="t-bio" value={values.bio} onChange={(e) => update("bio")(e.target.value)} placeholder="Kinh nghiệm tư vấn, chăm sóc học viên..." {...invalid("bio")} />
           </FormField>
-          <button type="submit" className="hidden" aria-hidden="true" tabIndex={-1} />
         </form>
       </Modal>
     </div>
