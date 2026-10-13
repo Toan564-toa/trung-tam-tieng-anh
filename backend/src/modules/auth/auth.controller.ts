@@ -62,7 +62,13 @@ export async function me(req: Request, res: Response) {
 
 export async function changePassword(req: Request, res: Response) {
   const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
-  await authService.changePassword(req.user!.id, currentPassword, newPassword, req.ip);
+  const tokens = await authService.changePassword(req.user!.id, currentPassword, newPassword, {
+    ip: req.ip,
+    userAgent: req.get('user-agent'),
+  });
+  // Đổi mật khẩu làm vô hiệu token cũ (tokenVersion đổi, refresh thu hồi) —
+  // đặt cookie phiên mới để người dùng tiếp tục dùng hệ thống luôn.
+  setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
   res.json({ data: { ok: true } });
 }
 
@@ -74,6 +80,10 @@ export async function forgotPassword(req: Request, res: Response) {
 
 export async function resetPassword(req: Request, res: Response) {
   const { token, newPassword } = resetPasswordSchema.parse(req.body);
-  await authService.resetPassword(token, newPassword);
+  const tokens = await authService.resetPassword(token, newPassword, {
+    ip: req.ip,
+    userAgent: req.get('user-agent'),
+  });
+  setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
   res.json({ data: { ok: true } });
 }

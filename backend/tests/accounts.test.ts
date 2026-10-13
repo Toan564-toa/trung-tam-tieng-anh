@@ -63,7 +63,7 @@ describe('refresh token lifecycle', () => {
     expect(rows.every((row) => !newCookie.includes(row.tokenHash))).toBe(true);
   });
 
-  it('thu hồi refresh token khi đăng xuất và đổi mật khẩu', async () => {
+  it('thu hồi refresh token khi đăng xuất và đổi mật khẩu, cấp phiên mới khi đổi mật khẩu', async () => {
     await createUser('admin', 'admin01');
     const cookie = await loginAs('admin01');
     const logout = await request(app()).post('/api/auth/logout').set('Cookie', cookie);
@@ -76,8 +76,16 @@ describe('refresh token lifecycle', () => {
       .set('Cookie', cookieAfterLogin)
       .send({ currentPassword: PASSWORD, newPassword: 'MatKhauMoi@456' });
     expect(changed.status).toBe(200);
-    expect(await prisma.refreshToken.findMany({ where: { revokedAt: null } })).toHaveLength(0);
+    // Phiên cũ bị thu hồi, nhưng trình duyệt vừa đổi mật khẩu được cấp phiên mới.
+    const rows = await prisma.refreshToken.findMany();
+    expect(rows.filter((row) => row.revokedAt === null)).toHaveLength(1);
+    const newPair = cookiesOf(changed)
+      .map((cookie: string) => cookie.split(';')[0])
+      .join('; ');
+    expect(newPair).toMatch(/refresh_token=/);
+    // Cookie cũ hết hiệu lực (tokenVersion đổi), cookie phiên mới vẫn dùng được.
     expect((await request(app()).get('/api/auth/me').set('Cookie', cookieAfterLogin)).status).toBe(401);
+    expect((await request(app()).get('/api/auth/me').set('Cookie', newPair)).status).toBe(200);
   });
 });
 
@@ -111,6 +119,26 @@ describe('password reset and must-change guard', () => {
       .post('/api/auth/reset-password')
       .send({ token: expiredToken, newPassword: 'MatKhauMoi@789' });
     expect(expired.status).toBe(400);
+  });
+
+  it('đặt lại mật khẩu trả cookie phiên mới và /api/auth/me hoạt động ngay', async () => {
+    const user = await createUser('student', 'student01');
+    await prisma.user.update({ where: { id: user.id }, data: { email: 'student01@test.vn' } });
+    const token = 'c'.repeat(48);
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    await prisma.passwordResetToken.create({
+      data: { userId: user.id, tokenHash, expiresAt: new Date(Date.now() + 60_000) },
+    });
+    const res = await request(app()).post('/api/auth/reset-password').send({ token, newPassword: 'MatKhauMoi@456' });
+    expect(res.status).toBe(200);
+    const pair = cookiesOf(res)
+      .map((c: string) => c.split(';')[0] ?? '')
+      .filter(Boolean)
+      .join('; ');
+    expect(pair).toMatch(/access_token=/);
+    const me = await request(app()).get('/api/auth/me').set('Cookie', pair);
+    expect(me.status).toBe(200);
+    expect(me.body.data.username).toBe('student01');
   });
 
   it('chặn API khác với PASSWORD_CHANGE_REQUIRED nhưng cho phép /me và đổi mật khẩu', async () => {

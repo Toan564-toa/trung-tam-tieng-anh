@@ -3,12 +3,13 @@
 @accountId = 2
 
 ### 1. Đăng nhập admin trước; REST Client tự giữ cookie Set-Cookie
+### (mật khẩu là giá trị SEED_ADMIN_PASSWORD trong .env — xem docs/PROGRESS.md mục "Vấn đề đã biết")
 POST {{baseUrl}}/api/auth/login
 Content-Type: application/json
 
 {
   "username": "admin",
-  "password": "DoiMatKhauNay@123",
+  "password": "<mật khẩu admin của bạn>",
   "portal": "admin"
 }
 

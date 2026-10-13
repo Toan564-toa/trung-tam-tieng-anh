@@ -51,6 +51,19 @@ describe('POST /api/auth/login', () => {
     expect(res.body.error.message).toBe('Sai tên đăng nhập hoặc mật khẩu');
   });
 
+  it('đăng nhập bằng email (form UI ghi "Tên đăng nhập hoặc email")', async () => {
+    const user = await createUser('student', 'student01');
+    await prisma.user.update({ where: { id: user.id }, data: { email: 'student01@test.vn' } });
+
+    const res = await request(app())
+      .post('/api/auth/login')
+      .send({ username: 'student01@test.vn', password: PASSWORD, portal: 'client' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.user.username).toBe('student01');
+    expect(res.body.data.user.roles).toContain('student');
+  });
+
   it('thiếu trường bắt buộc trả 400 VALIDATION_ERROR', async () => {
     const res = await request(app()).post('/api/auth/login').send({ username: 'admin01' });
 
@@ -206,6 +219,29 @@ describe('POST /api/auth/change-password', () => {
     const log = await prisma.auditLog.findFirst({ where: { action: 'change_password' } });
     expect(log).not.toBeNull();
     expect(JSON.stringify(log?.newData ?? null)).not.toContain('MatKhauMoi');
+  });
+
+  it('đổi mật khẩu thành công trả cookie phiên mới và /api/auth/me vẫn hoạt động', async () => {
+    await createUser('admin', 'admin01');
+    const cookie = await loginAs('admin01');
+
+    const res = await request(app())
+      .post('/api/auth/change-password')
+      .set('Cookie', cookie)
+      .send({ currentPassword: PASSWORD, newPassword: 'MatKhauMoi@456' });
+
+    expect(res.status).toBe(200);
+    const pair = cookiesOf(res)
+      .map((c: string) => c.split(';')[0] ?? '')
+      .filter(Boolean)
+      .join('; ');
+    expect(pair).toMatch(/access_token=/);
+    expect(pair).toMatch(/refresh_token=/);
+
+    // Cookie phiên mới dùng được ngay — người dùng không bị đẩy ra khỏi hệ thống.
+    const me = await request(app()).get('/api/auth/me').set('Cookie', pair);
+    expect(me.status).toBe(200);
+    expect(me.body.data.username).toBe('admin01');
   });
 });
 

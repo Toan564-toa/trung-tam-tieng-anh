@@ -48,23 +48,30 @@ async function createRefreshSession(
   return { refreshToken: token, accessToken: signAccessToken(userId, roles, tokenVersion) };
 }
 
-export async function login(username: string, password: string, portal: Portal, meta: RequestMeta) {
+export async function login(identifier: string, password: string, portal: Portal, meta: RequestMeta) {
+  // Đăng nhập bằng tên đăng nhập HOẶC email — form UI ghi
+  // "Tên đăng nhập hoặc email" nên backend phải chấp nhận cả hai.
   const user = await prisma.user.findFirst({
-    where: { username: { equals: username, mode: 'insensitive' } },
+    where: {
+      OR: [
+        { username: { equals: identifier, mode: 'insensitive' } },
+        { email: { equals: identifier, mode: 'insensitive' } },
+      ],
+    },
     include: { roles: { include: { role: true } } },
   });
   if (!user || user.deletedAt) {
-    await recordLogin(username, null, false, meta);
+    await recordLogin(identifier, null, false, meta);
     throw HttpError.unauthorized('Sai tên đăng nhập hoặc mật khẩu');
   }
   if (user.status !== 'ACTIVE') {
-    await recordLogin(username, user.id, false, meta);
+    await recordLogin(identifier, user.id, false, meta);
     throw user.status === 'LOCKED'
       ? HttpError.locked('Tài khoản đang bị khóa, vui lòng liên hệ quản trị')
       : HttpError.forbidden('Tài khoản không hoạt động');
   }
   if (user.lockedUntil && user.lockedUntil > new Date()) {
-    await recordLogin(username, user.id, false, meta);
+    await recordLogin(identifier, user.id, false, meta);
     throw HttpError.locked('Tài khoản tạm khóa do nhập sai nhiều lần, vui lòng thử lại sau');
   }
 
@@ -90,25 +97,25 @@ export async function login(username: string, password: string, portal: Portal, 
     } else {
       await prisma.user.update({ where: { id: user.id }, data: { failedLoginCount: failedCount } });
     }
-    await recordLogin(username, user.id, false, meta);
+    await recordLogin(identifier, user.id, false, meta);
     if (shouldLock) throw HttpError.locked('Tài khoản tạm khóa do nhập sai nhiều lần, vui lòng thử lại sau');
     throw HttpError.unauthorized('Sai tên đăng nhập hoặc mật khẩu');
   }
 
   const roles = user.roles.map(({ role }) => role.code);
   if (portal === 'admin' && !roles.includes('admin')) {
-    await recordLogin(username, user.id, false, meta);
+    await recordLogin(identifier, user.id, false, meta);
     throw HttpError.forbidden('Tài khoản không có quyền quản trị');
   }
   if (portal === 'client' && roles.includes('admin') && !roles.some((role) => role !== 'admin')) {
-    await recordLogin(username, user.id, false, meta);
+    await recordLogin(identifier, user.id, false, meta);
     throw HttpError.forbidden('Vui lòng đăng nhập tài khoản quản trị tại cổng admin');
   }
   await prisma.user.update({
     where: { id: user.id },
     data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() },
   });
-  await recordLogin(username, user.id, true, meta);
+  await recordLogin(identifier, user.id, true, meta);
   const tokens = await createRefreshSession(user.id, user.tokenVersion, roles, meta);
   return {
     user: {
@@ -244,7 +251,7 @@ export async function getProfile(userId: number) {
   };
 }
 
-export async function changePassword(userId: number, currentPassword: string, newPassword: string, ip?: string) {
+export async function changePassword(userId: number, currentPassword: string, newPassword: string, meta: RequestMeta) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw HttpError.notFound('Không tìm thấy tài khoản');
   if (!(await argon2.verify(user.passwordHash, currentPassword)))
@@ -257,8 +264,21 @@ export async function changePassword(userId: number, currentPassword: string, ne
     });
     await tx.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
     await tx.passwordResetToken.updateMany({ where: { userId, usedAt: null }, data: { usedAt: new Date() } });
-    await writeAudit({ userId, action: 'change_password', tableName: 'users', recordId: userId, ip }, tx);
+    await writeAudit({ userId, action: 'change_password', tableName: 'users', recordId: userId, ip: meta.ip }, tx);
   });
+  // tokenVersion đã đổi và refresh token cũ bị thu hồi — cấp phiên mới ngay để
+  // người dùng không bị đẩy ra khỏi hệ thống ngay sau khi đổi mật khẩu thành công.
+  return newSessionAfterPasswordChange(userId, meta);
+}
+
+async function newSessionAfterPasswordChange(userId: number, meta: RequestMeta) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { roles: { include: { role: true } } },
+  });
+  if (!user || user.deletedAt || user.status !== 'ACTIVE') throw HttpError.unauthorized();
+  const roles = user.roles.map(({ role }) => role.code);
+  return createRefreshSession(userId, user.tokenVersion, roles, meta);
 }
 
 function hashResetToken(token: string) {
@@ -286,7 +306,7 @@ export async function requestPasswordReset(email: string) {
   }
 }
 
-export async function resetPassword(token: string, newPassword: string) {
+export async function resetPassword(token: string, newPassword: string, meta: RequestMeta) {
   const tokenHash = hashResetToken(token);
   const reset = await prisma.passwordResetToken.findUnique({
     where: { tokenHash },
@@ -324,4 +344,7 @@ export async function resetPassword(token: string, newPassword: string) {
       tx,
     );
   });
+  // Cấp phiên mới cho trình duyệt vừa dùng link đặt lại (đã chứng minh sở hữu email)
+  // — tokenVersion đã đổi, mọi phiên cũ đều bị vô hiệu.
+  return newSessionAfterPasswordChange(reset.userId, meta);
 }
