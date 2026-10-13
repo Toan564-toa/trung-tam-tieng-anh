@@ -407,3 +407,50 @@ nếu quyết định cũ sai thì thêm quyết định mới ghi "thay thế D
 - `POST /api/imports/:id/credentials` trả Excel danh sách tài khoản + mật khẩu tạm. Token ngẫu nhiên 256-bit, **dùng một lần**, hết hạn 15 phút, lưu trong `Map` bộ nhớ service (không vào DB, log, audit). Sai token -> 404; đã dùng -> 409; hết hạn -> 410.
 - Hệ quả: restart server mất token chưa dùng (admin phải xác nhận lại không được — lô đã COMPLETED; chấp nhận vì mật khẩu chỉ cần tải ngay sau khi nhập). Không lưu mật khẩu dạng rõ ở bất kỳ đâu (BR-12).
 - Lý do: bảng `import_credentials` sẽ phải lưu mật khẩu dạng rõ hoặc mã hóa reversible — đều vi phạm "không lưu mật khẩu dạng rõ"; trong bộ nhớ là an toàn nhất cho dữ liệu nhất thời.
+
+## D-041: Auth state chỉ qua `/api/auth/me`, bỏ localStorage (P7 NỐI #1) [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-13, P7.
+- `AuthProvider` gọi `/api/auth/me` mỗi tải trang (cookie httpOnly tự gửi); không lưu user/token ở localStorage (quy tắc: không lưu token vào localStorage). Trạng thái `initializing` để `requireRole` hiện loading thay vì nhảy về login.
+- `mock-accounts.ts` chỉ còn dữ liệu cho `DemoRolePicker` khi `VITE_DEMO_MODE=true`; production build không dùng.
+
+## D-042: Tài khoản nhiều vai trò → màn chọn khu vực `/chon-khu-vuc` (P7) [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-13, P7.
+- Login thành công: `mustChangePassword` → `/doi-mat-khau`; nhiều vai trò → `/chon-khu-vuc` (chọn portal, lưu choice trong state context, không localStorage); một vai trò → thẳng `ROLE_META[role].home`.
+- `requireRole` redirect về `ROLE_META[user.role].home` khi sai vai trò; trang 403 riêng (`/403`) cho truy cập trực tiếp URL.
+
+## D-043: Màn Tài khoản xuất Excel ở client (P7) [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-13, P7.
+- Backend module `accounts` **không có** endpoint export (chỉ students/teachers/staff có `/export`). Màn Tài khoản dùng `exportAdminTable` client-side, lấy tối đa 100 dòng từ API. Lệch nhỏ so với hợp đồng F5/F6 (xuất server) — ghi nhận ở đây; bổ sung endpoint export cho accounts ở phase sau nếu cần.
+
+## D-044: Chuẩn hoá lỗi UI qua `errorMessage()` (P7) [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-13, P7.
+- `lib/api-error.ts`: ưu tiên `error.message` tiếng Việt từ backend (`ApiError`), fallback message mặc định. Mọi mutation/query `.catch` dùng helper này — không để lỗi raw ra UI.
+
+## D-045: `SessionExpiryHandler` trong `RootLayout` (P7) [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-13, P7.
+- Component cần `useNavigate` nên phải render bên trong `RouterProvider`. `RootLayout` (wraps RouterProvider) là nơi phù hợp; `app.tsx` chỉ còn `ErrorBoundary` + `RootLayout`.
+
+## D-046: Tạo GV/NV qua form không kèm tài khoản (P7) [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-13, P7.
+- Form thêm/sửa giáo viên/nhân viên chỉ gửi trường hồ sơ (backend hỗ trợ `account.username` tùy chọn nhưng UI không tạo TK kèm). Muốn tài khoản đăng nhập: admin tạo riêng ở màn Tài khoản (`/tai-khoan`). Tránh hai nơi cùng tạo username bị trùng.
+- Học viên không có khái niệm tài khoản riêng biệt — `hasAccount` chỉ là badge đọc từ `userId !== null`.
+
+## D-047: Đổi/đặt lại mật khẩu cấp phiên mới ngay (P7, sửa bug) [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-13, P7 (sửa bug khi test thủ công).
+- Triệu chứng: đăng nhập tài khoản mới (mật khẩu tạm) → đổi mật khẩu thành công → mọi request kế tiếp báo "Phiên đăng nhập đã hết hạn".
+- Nguyên nhân: `changePassword`/`resetPassword` tăng `tokenVersion` và thu hồi **mọi** refresh token nhưng **không cấp token mới**. Access token cookie cũ có `ver` cũ → middleware từ chối (401); client thử `/api/auth/refresh` → refresh token đã thu hồi → 401 → client báo hết phiên.
+- Đã chọn: sau khi đổi/đặt lại mật khẩu thành công, service tạo refresh session mới (`createRefreshSession` với `tokenVersion` mới) và controller đặt lại cookie `access_token`/`refresh_token`. Phiên cũ (trình duyệt khác) vẫn bị thu hồi đúng ý đồ bảo mật; trình duyệt đang thao tác được tiếp tục dùng hệ thống.
+- Hệ quả: test `accounts.test.ts` cập nhật kỳ vọng (sau đổi mật khẩu còn đúng 1 refresh token chưa thu hồi = phiên mới; cookie cũ 401, cookie mới 200). Test mới ở `auth.test.ts` và `accounts.test.ts` xác nhận cookie phiên mới và `/api/auth/me` hoạt động ngay.
+
+## D-048: Endpoint auth công khai không trigger làm mới phiên (P7, sửa bug) [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-13, P7 (sửa bug khi test thủ công).
+- Triệu chứng: đăng nhập sai mật khẩu (login trả 401 `UNAUTHORIZED`) nhưng UI lại báo "Phiên đăng nhập đã hết hạn" — vì `apiRequest` xử lý **mọi** 401 bằng cách thử `/api/auth/refresh` rồi báo hết phiên, che mất lỗi thật "Sai tên đăng nhập hoặc mật khẩu".
+- Đã chọn: `client.ts` bỏ qua bước làm mới token với các endpoint công khai (`/api/auth/login`, `/api/auth/forgot-password`, `/api/auth/reset-password`) — 401 ở đó là lỗi nghiệp vụ (sai mật khẩu, token reset không hợp lệ), trả thẳng message từ backend.
+- Hệ quả: UI giờ hiển thị đúng "Sai tên đăng nhập hoặc mật khẩu" khi đăng nhập sai; chỉ endpoint cần đăng nhập mới đi vào flow refresh → hết phiên.
+
+## D-049: Đăng nhập bằng tên đăng nhập hoặc email (P7, sửa bug) [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-13, P7 (sửa bug khi test thủ công).
+- Triệu chứng: tạo tài khoản học viên (có email) rồi đăng nhập bằng email → 401 "Sai tên đăng nhập hoặc mật khẩu", dù mật khẩu tạm copy đúng. Đăng nhập admin (username `admin`) vẫn thành công.
+- Nguyên nhân: form login UI ghi "Tên đăng nhập hoặc email" (placeholder "VD: hocvien hoặc email@trungtam.edu.vn") nhưng `authService.login` chỉ tìm theo cột `username` — nhập email trả "không tìm thấy user" → 401.
+- Đã chọn: `login` tìm `OR[username, email]` (không phân biệt hoa thường). Lịch sử đăng nhập ghi identifier người dùng nhập. Test mới: "đăng nhập bằng email" (auth.test.ts, 19/19 xanh).
+- Lưu ý: nếu một user có username trùng email của user khác, `findFirst` trả bản ghi đầu tiên — chấp nhận ở quy mô trung tâm; không ảnh hưởng flow chính.

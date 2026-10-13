@@ -1,10 +1,10 @@
 # Tiến độ dự án
 
 ## Trạng thái hiện tại
-- Phase đã hoàn thành: **P4** (2026-10-07) · **P5** (2026-10-09, sửa rà soát 2026-10-10) · **P6 — Import Excel (BE)** (2026-10-12)
-- Phase hiện tại: **P7 — NỐI #1** (chưa bắt đầu)
+- Phase đã hoàn thành: **P4** (2026-10-07) · **P5** (2026-10-09, sửa rà soát 2026-10-10) · **P6 — Import Excel (BE)** (2026-10-12) · **P7 — NỐI #1** (2026-10-13)
+- Phase hiện tại: **P8 — Khóa học, lớp, buổi học, ghi danh (BE)**
 - Lệnh chạy dự án: `npm run dev:fe` (frontend) · `npm run dev:be` (backend, `http://localhost:4000`)
-- Cập nhật lần cuối: 2026-10-12, phiên 9 (P6 Import Excel: template, upload+validate, preview, confirm, credentials một lần)
+- Cập nhật lần cuối: 2026-10-13, phiên 11 (hỗ trợ auth: xác minh lỗi hết phiên và khôi phục tài khoản admin)
 - Chi tiết P3: `docs/DECISIONS.md` D-022…D-024, `docs/DB.md`
 - Chi tiết P4: `docs/DECISIONS.md` D-025…D-029, `docs/API.md` phần Auth và tài khoản
 - Chi tiết P5: `docs/DECISIONS.md` D-030…D-038, `docs/API.md` phần hồ sơ, tệp, giáo viên, nhân viên
@@ -20,7 +20,7 @@
 - [x] P4 Đăng nhập và quản lý tài khoản (BE) — **xong 2026-10-07** (xem nhật ký phiên 6)
 - [x] P5 Hồ sơ người dùng và tệp (BE) — **xong 2026-10-09** (xem nhật ký phiên 7)
 - [x] P6 Import Excel (BE) — **xong 2026-10-12** (xem nhật ký phiên 9)
-- [ ] P7 NỐI #1: đăng nhập, tài khoản, hồ sơ, import
+- [x] P7 NỐI #1: đăng nhập, tài khoản, hồ sơ, import — **xong 2026-10-13** (xem nhật ký phiên 10)
 ### Mốc 2: Lớp học và điểm danh
 - [ ] P8 Khóa học, lớp, buổi học, ghi danh (BE)
 - [ ] P9 Điểm danh (BE)
@@ -57,6 +57,42 @@ Thứ tự này xuất ra từ ma trận quyền (`docs/PERMISSIONS.md`) và h�
 | 10 | `notifications, audit_logs, settings, sequences, files` + view báo cáo (P18) | Dashboard, báo cáo, cài đặt; `audit_logs` bắt buộc từ Mốc 1 |
 
 ## Nhật ký bàn giao (mới nhất ở trên)
+### Phiên 11: 2026-10-13 (hỗ trợ auth sau P7)
+- Điều tra thông báo “Phiên đăng nhập đã hết hạn” khi đăng nhập vai trò không phải admin; đối chiếu source xác nhận các xử lý đã ghi ở D-047 (cấp phiên mới sau đổi/đặt lại mật khẩu) và D-048 (không refresh khi endpoint auth công khai trả 401) hiện có trong mã.
+- Theo xác nhận của người dùng, đặt lại thông tin đăng nhập tài khoản `admin` trên database backend đang cấu hình: kích hoạt tài khoản, đặt mật khẩu tạm ngẫu nhiên, bắt buộc đổi mật khẩu khi đăng nhập lần đầu; vô hiệu hoá phiên/token cũ và ghi audit. Không ghi mật khẩu vào tài liệu.
+- Smoke test `POST /api/auth/login` trên backend local thành công với portal admin; sau đó đăng xuất phiên kiểm tra.
+- Không thay đổi endpoint, schema hay mã nguồn trong phiên này.
+
+### Phiên 10: 2026-10-13 (P7 — NỐI #1 frontend ↔ backend; **xong**, typecheck/lint/build xanh)
+- Phạm vi: chỉ đổi nguồn dữ liệu (mock → API), KHÔNG đổi design/layout/colors/text (AGENTS.md mục 4).
+- Đã làm trong frontend:
+  - **Nền tảng**: `src/api/client.ts` (fetch wrapper, cookie tự gửi, refresh-once, `ApiError` chuẩn hoá, `toQuery`); `src/api/{auth,me,users,students,teachers,staff,imports,files}.ts`; TanStack Query; `AuthProvider`/`useAuth` qua `/api/auth/me` (không localStorage — D-041).
+  - **Auth flow**: login (`portal: client|admin`), logout, refresh, đổi MK lần đầu, quên/đặt lại MK (`/dat-lai-mat-khau?token=`); `requireRole` có loading state, check `user.roles`, redirect theo `ROLE_META`; tài khoản nhiều vai trò → `/chon-khu-vuc` (D-042); `DemoRolePicker` chỉ chạy khi `VITE_DEMO_MODE=true`; bỏ text tài khoản mẫu ở login pages.
+  - **Admin Tài khoản** (`/tai-khoan`): danh sách server-side (tìm/filter/trạng thái/đã xoá/phân trang), thống kê (3 count query song song), tạo tài khoản (hiện mật khẩu tạm 1 lần), sửa, khoá/mở, đặt lại MK (server sinh, hiện 1 lần), lịch sử đăng nhập phân trang, xoá mềm/khôi phục, xuất Excel client-side (D-043).
+  - **Admin HV/GV/NV**: danh sách server-side (HV dùng `search`, GV/NV dùng `query`), lọc trạng thái, đã xoá, phân trang; tạo/sửa modal (validate email/sđt), xoá mềm/khôi phục; HV/GV/NV xuất Excel qua `/export` (blob download). Tạo GV/NV không kèm tài khoản (D-046).
+  - **Hồ sơ 3 vai trò**: `meApi.profile` + sửa trực tiếp trường `DIRECT_FIELDS`; trường nhạy cảm (`SENSITIVE_FIELDS`) tạo yêu cầu duyệt qua `profile-change-requests`; học viên thêm danh sách ghi danh + phụ huynh; giáo viên/nhân viên giữ mock lịch dạy/thu nhập/lớp/leads (phụ thuộc P8+).
+  - **Import Excel wizard** (`/nhap-excel`): 4 bước qua `importsApi` — tải mẫu, upload, preview (phân trang + lọc trạng thái), confirm (flow `HAS_ERROR_ROWS` → hỏi bỏ lỗi), tải credentials Excel một lần.
+  - **ErrorBoundary** bọc `RouterProvider`; trang 403 (`/403`) và 404; `SessionExpiryHandler` chuyển vào `RootLayout` (D-045).
+  - **Type unification**: `Role` thêm `guardian`; `ROLE_META`/`role-nav`/`client-layout`/`role-home-page`/`notifications`/`ACCOUNT_ROLE_META` cập nhật đủ 5 vai trò.
+- Kiểm tra:
+  - Frontend `npm run typecheck`: **xanh** · `npm run lint`: **xanh** (chỉ warning Fast Refresh pre-existing) · `npm run build`: **xanh** (~7s).
+  - Backend không bị sửa trong phase này (phase NỐI).
+- Lỗi đã sửa trong phiên:
+  - `ApiError` dùng parameter property → lỗi `erasableSyntaxOnly`; đổi khai báo field + gán trong constructor.
+  - Gọi `useQuery` trong helper `countQuery` → lỗi `rules-of-hooks`; viết tường minh 3 query.
+  - `update(key)` trả `(value: string) => void` nhưng `Input onChange` cần `ChangeEventHandler` → wrap `onChange={(e) => update(key)(e.target.value)}` (3 page).
+  - `ConfirmDialog` chỉ nhận `tone: "danger" | "primary"` — sửa `"warning"` → `"danger"`.
+  - `users.ts` xoá `exportExcel` (endpoint không tồn tại); `ResetPasswordResult` sửa thành `{ temporaryPassword }`.
+- Quyết định: D-041…D-046 (xem `docs/DECISIONS.md`).
+- Còn dở / cần làm tiếp:
+  - **Đã sửa bug "Phiên đăng nhập đã hết hạn" sau đổi mật khẩu** (2026-10-13, xem D-047): `changePassword`/`resetPassword` giờ cấp cookie phiên mới. Test auth (18) + accounts (12) xanh. **Cần restart `npm run dev:be` để backend chạy code mới.**
+  - **Đã sửa bug login sai mật khẩu lại báo "hết phiên"** (2026-10-13, xem D-048): `client.ts` không thử làm mới token với endpoint công khai (login/forgot/reset) — giờ hiển thị đúng "Sai tên đăng nhập hoặc mật khẩu". Frontend-only, HMR áp dụng ngay.
+  - **Đã sửa bug đăng nhập bằng email bị 401** (2026-10-13, xem D-049): `authService.login` tìm theo username HOẶC email (form UI ghi "Tên đăng nhập hoặc email"). Test auth 19/19 xanh. **Cần restart `npm run dev:be`.**
+  - **Chưa test thủ công với backend thật** — 6 kịch bản người dùng (đăng nhập admin + đổi MK lần đầu; tạo TK thủ công; import Excel mẫu rồi đăng nhập TK mới; đăng nhập mỗi vai trò thấy đúng khu vực; sai MK 5 lần bị khoá; học viên không vào `/admin`) cần chạy `npm run dev:be` + `npm run db:seed` rồi thử.
+  - Giáo viên/nhân viên: lịch dạy, thu nhập, lớp phụ trách, leads vẫn mock (phụ thuộc P8+).
+  - Các màn khác (lớp, điểm danh, học phí, dashboard, landing) vẫn mock — phases P8–P19.
+  - Chưa commit (theo quy định: chỉ commit khi người dùng yêu cầu).
+
 ### Phiên 9: 2026-10-12 (P6 — Import Excel BE; **xong**, `npm run check` xanh)
 - Đã làm trong backend:
   - Module `imports` (hoàn thiện WIP có sẵn): `GET /api/imports/templates/:type` (Excel mẫu, tiêu đề tiếng Việt + ví dụ), `POST /api/imports` (multipart, đọc xlsx, ánh xạ cột tiếng Việt, chuẩn hóa sđt/ngày/giới tính, validate zod từng dòng, phát hiện trùng mã/sđt trong file và hệ thống, lưu `import_batches`/`import_rows`), `GET /api/imports/:id` (preview phân trang, lọc trạng thái), `POST /api/imports/:id/confirm` (tạo User + hồ sơ + vai trò trong một transaction, timeout tỉ lệ số dòng), `POST /api/imports/:id/credentials` (Excel tài khoản + mật khẩu tạm, token một lần hết hạn 15 phút, lưu trong bộ nhớ).

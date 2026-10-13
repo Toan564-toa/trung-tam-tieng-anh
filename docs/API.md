@@ -104,6 +104,7 @@
 ### POST /api/auth/login
 - Quyền: công khai (có `loginLimiter` 20 lần / 15 phút).
 - Body: `{ "username": string, "password": string, "portal": "client" | "admin" }` (`portal` mặc định `client`).
+- **`username` chấp nhận tên đăng nhập HOẶC email** (form UI ghi "Tên đăng nhập hoặc email" — fix 2026-10-13, xem D-049).
 - Thành công 200: `{ "data": { "user": { "id": string, "username", "name", "email", "phone", "status", "role", "roles", "mustChangePassword" } } }`.
 - Không trả token hoặc `passwordHash` trong body; token nằm trong cookie `httpOnly`.
 - Portal `admin` chỉ nhận tài khoản có vai trò admin; portal `client` từ chối tài khoản chỉ có vai trò admin.
@@ -145,15 +146,15 @@ Ví dụ response 200 (token chỉ có trong `Set-Cookie` httpOnly):
 
 ### POST /api/auth/change-password
 - Quyền: mọi vai trò · Body: `{ "currentPassword", "newPassword" }`
-- Thành công 200: `{ "data": { "ok": true } }` + ghi `audit_logs` (`change_password`).
+- Thành công 200: `{ "data": { "ok": true } }` + **đặt lại cookie `access_token`/`refresh_token` (phiên mới)** + ghi `audit_logs` (`change_password`).
 - Lỗi: 400 `VALIDATION_ERROR` hoặc `BAD_REQUEST`, 401 `UNAUTHORIZED`.
-- Quy tắc: tự xoá cờ `mustChangePassword`, tăng `tokenVersion` và thu hồi mọi refresh token. Các access token cũ bị từ chối.
+- Quy tắc: tự xoá cờ `mustChangePassword`, tăng `tokenVersion` và thu hồi mọi refresh token cũ. Các access token cũ bị từ chối — nhưng response cấp phiên mới nên trình duyệt đang đổi mật khẩu không bị đẩy ra khỏi hệ thống (fix bug "Phiên đăng nhập đã hết hạn" sau đổi mật khẩu, 2026-10-13).
 - Khi `mustChangePassword=true`, API cần đăng nhập khác ngoài `/api/auth/me`, `/api/auth/change-password`, `/api/auth/logout` trả 403 `PASSWORD_CHANGE_REQUIRED`.
 
 ### POST /api/auth/forgot-password · POST /api/auth/reset-password
 - `forgot-password`: body `{ "email": string }`; luôn trả 200 `{ "data": { "message": "Nếu email tồn tại, hướng dẫn đặt lại mật khẩu sẽ được gửi." } }`, kể cả email không có trong hệ thống. Giới hạn 5 lần/giờ.
 - Nếu tài khoản tồn tại, gửi liên kết reset qua SMTP; token ngẫu nhiên chỉ lưu SHA-256 hash, dùng một lần và hết hạn sau 20 phút. Development ghi thông báo email với token đã ẩn.
-- `reset-password`: body `{ "token": string, "newPassword": string }`; 200 `{ "data": { "ok": true } }`; token sai/hết hạn/đã dùng trả 400. Thu hồi mọi refresh token và access token cũ, ghi audit.
+- `reset-password`: body `{ "token": string, "newPassword": string }`; 200 `{ "data": { "ok": true } }` + **đặt cookie phiên mới (trình duyệt dùng link được đăng nhập luôn)**; token sai/hết hạn/đã dùng trả 400. Thu hồi mọi refresh token và access token cũ, ghi audit.
 
 Ví dụ quên mật khẩu:
 
