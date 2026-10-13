@@ -10,19 +10,19 @@ export const IMPORT_KIND_META: Record<ImportKind, { label: string; role: Account
     label: "Học viên",
     role: "student",
     prefix: "hv",
-    description: "Mã học viên, họ tên, ngày sinh, giới tính, SĐT phụ huynh và lớp muốn xếp.",
+    description: "Mã học viên*, Họ tên*, Ngày sinh, Giới tính, SĐT, Email, Địa chỉ, Trường, Trình độ.",
   },
   teacher: {
     label: "Giáo viên",
     role: "teacher",
     prefix: "gv",
-    description: "Họ tên, email công ty, số điện thoại, trình độ và chuyên môn.",
+    description: "Mã giáo viên*, Họ tên*, SĐT, Email, Chuyên môn, Ngày vào, Hiện website.",
   },
   staff: {
     label: "Nhân viên",
     role: "staff",
     prefix: "nv",
-    description: "Họ tên, email công ty, số điện thoại và phòng ban.",
+    description: "Mã nhân viên*, Họ tên*, SĐT, Email, Chức vụ, Phòng ban, Ngày vào.",
   },
 }
 

@@ -1,10 +1,13 @@
-import { useMemo, useState, type FormEvent } from "react"
+import { useState, type FormEvent } from "react"
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   Copy,
   Download,
+  History,
   KeyRound,
   Lock,
   Pencil,
+  Plus,
   RotateCcw,
   ShieldCheck,
   Trash2,
@@ -27,15 +30,9 @@ import { FormField } from "@/components/ui/form-field"
 import { fieldBase, Input } from "@/components/ui/input"
 import { Modal } from "@/components/ui/modal"
 import { toast } from "@/components/ui/toast"
-import {
-  ACCOUNT_ROLE_META,
-  ACCOUNT_STATUS_META,
-  ADMIN_ACCOUNTS,
-  ADMIN_TODAY_LABEL,
-  type AccountRole,
-  type AccountStatus,
-  type AdminAccount,
-} from "@/data/admin"
+import { usersApi, type Account, type AccountRole, type AccountStatus } from "@/api/users"
+import type { LoginHistoryRow } from "@/api/auth"
+import { ACCOUNT_ROLE_META, ACCOUNT_STATUS_META } from "@/data/admin"
 import { exportAdminTable } from "@/lib/admin-excel"
 
 const PAGE_SIZE = 10
@@ -56,16 +53,21 @@ type EditErrors = Partial<Record<keyof EditValues, string>>
 
 type ConfirmState = {
   kind: "lock" | "unlock" | "delete"
-  account: AdminAccount
+  account: Account
 } | null
 
-function tempPassword(username: string) {
-  const alphabet = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-  let tail = ""
-  for (let i = 0; i < 6; i += 1) {
-    tail += alphabet.charAt(Math.floor(Math.random() * alphabet.length))
-  }
-  return `${username.replace(/[^a-zA-Z0-9]/g, "").slice(-3) || "ttnn"}${tail}`
+function formatDate(value: string | null | undefined) {
+  if (!value) return ""
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString("vi-VN")
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return ""
+  const date = new Date(value)
+  return Number.isNaN(date.getTime())
+    ? ""
+    : `${date.toLocaleDateString("vi-VN")} ${date.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}`
 }
 
 function copyText(value: string, label: string) {
@@ -75,88 +77,138 @@ function copyText(value: string, label: string) {
     .catch(() => toast.error("Không sao chép được", { description: "Hãy bôi đen và copy thủ công." }))
 }
 
+function errorMessage(err: unknown, fallback: string) {
+  return err instanceof Error ? err.message : fallback
+}
+
 export function AdminAccountsPage() {
-  const [accounts, setAccounts] = useState<AdminAccount[]>(ADMIN_ACCOUNTS)
+  const queryClient = useQueryClient()
   const [query, setQuery] = useState("")
   const [role, setRole] = useState<AccountRole | "all">("all")
   const [status, setStatus] = useState<AccountStatus | "all">("all")
   const [onlyDeleted, setOnlyDeleted] = useState(false)
   const [page, setPage] = useState(1)
-  const [editing, setEditing] = useState<AdminAccount | null>(null)
+  const [editing, setEditing] = useState<Account | null>(null)
   const [editOpen, setEditOpen] = useState(false)
-  const [resetting, setResetting] = useState<AdminAccount | null>(null)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [resetting, setResetting] = useState<Account | null>(null)
   const [resetOpen, setResetOpen] = useState(false)
+  const [history, setHistory] = useState<Account | null>(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [confirm, setConfirm] = useState<ConfirmState>(null)
 
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase()
-    return accounts.filter((account) => {
-      if (onlyDeleted ? !account.deletedAt : account.deletedAt) return false
-      if (role !== "all" && account.role !== role) return false
-      if (status !== "all" && account.status !== status) return false
-      if (!needle) return true
-      return [account.username, account.fullName, account.email, account.phone].some((field) =>
-        field.toLowerCase().includes(needle),
-      )
-    })
-  }, [accounts, query, role, status, onlyDeleted])
+  const listQuery = useQuery({
+    queryKey: ["users", { query, role, status, onlyDeleted, page }],
+    queryFn: () =>
+      usersApi.list({
+        query: query.trim() || undefined,
+        role: role === "all" ? undefined : role,
+        status: status === "all" ? undefined : status,
+        onlyDeleted,
+        page,
+        pageSize: PAGE_SIZE,
+      }),
+    placeholderData: keepPreviousData,
+  })
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const currentPage = Math.min(page, pageCount)
-  const rows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+  // Thống kê: đếm theo trạng thái (lấy 1 dòng chỉ để lấy total).
+  const activeCount = useQuery({
+    queryKey: ["users", "count", "active"],
+    queryFn: () => usersApi.list({ status: "active", page: 1, pageSize: 1 }),
+  })
+  const lockedCount = useQuery({
+    queryKey: ["users", "count", "locked"],
+    queryFn: () => usersApi.list({ status: "locked", page: 1, pageSize: 1 }),
+  })
+  const pendingCount = useQuery({
+    queryKey: ["users", "count", "pending"],
+    queryFn: () => usersApi.list({ status: "pending", page: 1, pageSize: 1 }),
+  })
 
-  const live = accounts.filter((account) => !account.deletedAt)
+  const rows = listQuery.data?.items ?? []
+  const total = listQuery.data?.total ?? 0
+  const pageCount = Math.max(1, listQuery.data?.totalPages ?? 1)
   const stats = {
-    total: accounts.length,
-    active: live.filter((account) => account.status === "active").length,
-    locked: live.filter((account) => account.status === "locked").length,
-    pending: live.filter((account) => account.status === "pending").length,
+    total,
+    active: activeCount.data?.total ?? 0,
+    locked: lockedCount.data?.total ?? 0,
+    pending: pendingCount.data?.total ?? 0,
   }
 
-  const patch = (id: string, changes: Partial<AdminAccount>) =>
-    setAccounts((prev) => prev.map((account) => (account.id === id ? { ...account, ...changes } : account)))
+  const invalidate = () => void queryClient.invalidateQueries({ queryKey: ["users"] })
+
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: "active" | "locked" }) => usersApi.setStatus(id, status),
+    onSuccess: () => {
+      invalidate()
+      toast.success("Đã cập nhật trạng thái tài khoản")
+    },
+    onError: (err) => toast.error(errorMessage(err, "Không cập nhật được trạng thái")),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => usersApi.remove(id),
+    onSuccess: () => {
+      invalidate()
+      toast.success("Đã xoá tài khoản", { description: "Tài khoản chuyển sang mục đã xoá, có thể khôi phục." })
+    },
+    onError: (err) => toast.error(errorMessage(err, "Không xoá được tài khoản")),
+  })
+
+  const restoreMutation = useMutation({
+    mutationFn: (id: number) => usersApi.restore(id),
+    onSuccess: () => {
+      invalidate()
+      toast.success("Đã khôi phục tài khoản", { description: "Tài khoản trở lại danh sách đang hoạt động." })
+    },
+    onError: (err) => toast.error(errorMessage(err, "Không khôi phục được tài khoản")),
+  })
 
   const runConfirm = () => {
     if (!confirm) return
     const { kind, account } = confirm
     setConfirm(null)
     if (kind === "lock") {
-      patch(account.id, { status: "locked" })
-      toast.success("Đã khoá tài khoản", { description: `${account.fullName} (${account.username}) không thể đăng nhập.` })
+      statusMutation.mutate({ id: account.id, status: "locked" })
       return
     }
     if (kind === "unlock") {
-      patch(account.id, { status: "active" })
-      toast.success("Đã mở khoá tài khoản", { description: `${account.fullName} (${account.username}) đăng nhập lại được.` })
+      statusMutation.mutate({ id: account.id, status: "active" })
       return
     }
-    patch(account.id, { deletedAt: ADMIN_TODAY_LABEL })
-    toast.success("Đã xoá tài khoản", { description: `${account.fullName} chuyển sang mục đã xoá, có thể khôi phục.` })
-  }
-
-  const restore = (account: AdminAccount) => {
-    patch(account.id, { deletedAt: undefined })
-    toast.success("Đã khôi phục tài khoản", { description: `${account.fullName} trở lại danh sách đang hoạt động.` })
+    deleteMutation.mutate(account.id)
   }
 
   const onExport = () => {
-    void exportAdminTable(
-      "Danh-sach-tai-khoan",
-      "Tai khoan",
-      ["Tên đăng nhập", "Họ và tên", "Vai trò", "Email", "Số điện thoại", "Đăng nhập cuối", "Ngày tạo", "Trạng thái"],
-      filtered.map((account) => [
-        account.username,
-        account.fullName,
-        ACCOUNT_ROLE_META[account.role].label,
-        account.email,
-        account.phone,
-        account.lastLogin || "Chưa đăng nhập",
-        account.createdAt,
-        account.deletedAt ? "Đã xoá" : ACCOUNT_STATUS_META[account.status].label,
-      ]),
-    )
-      .then(() => toast.success("Đã xuất danh sách tài khoản", { description: `${filtered.length} dòng ra file Excel.` }))
-      .catch(() => toast.error("Không xuất được file Excel"))
+    // Xuất tối đa 100 dòng khớp bộ lọc hiện tại (giới hạn phân trang của API).
+    void usersApi
+      .list({
+        query: query.trim() || undefined,
+        role: role === "all" ? undefined : role,
+        status: status === "all" ? undefined : status,
+        onlyDeleted,
+        page: 1,
+        pageSize: 100,
+      })
+      .then((result) =>
+        exportAdminTable(
+          "Danh-sach-tai-khoan",
+          "Tai khoan",
+          ["Tên đăng nhập", "Họ và tên", "Vai trò", "Email", "Số điện thoại", "Đăng nhập cuối", "Ngày tạo", "Trạng thái"],
+          result.items.map((account) => [
+            account.username,
+            account.fullName,
+            account.roles.map((key) => ACCOUNT_ROLE_META[key].label).join(", "),
+            account.email ?? "",
+            account.phone ?? "",
+            account.lastLoginAt ? formatDateTime(account.lastLoginAt) : "Chưa đăng nhập",
+            formatDate(account.createdAt),
+            account.deletedAt ? "Đã xoá" : ACCOUNT_STATUS_META[account.status].label,
+          ]),
+        ),
+      )
+      .then(() => toast.success("Đã xuất danh sách tài khoản", { description: "File Excel đã được tải xuống." }))
+      .catch((err) => toast.error(errorMessage(err, "Không xuất được file Excel")))
   }
 
   const confirmMeta = (() => {
@@ -186,13 +238,18 @@ export function AdminAccountsPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow={`${stats.total} tài khoản trong hệ thống · dữ liệu ${ADMIN_TODAY_LABEL}`}
+        eyebrow={`${stats.total.toLocaleString("vi-VN")} tài khoản trong hệ thống`}
         title="Tài khoản & phân quyền"
         description="Khoá, đặt lại mật khẩu, đổi vai trò và xoá mềm tài khoản của học viên, giáo viên, nhân viên và quản trị."
         actions={
-          <Button variant="outline" onClick={onExport}>
-            <Download /> Xuất Excel
-          </Button>
+          <>
+            <Button variant="outline" onClick={onExport}>
+              <Download /> Xuất Excel
+            </Button>
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus /> Thêm tài khoản
+            </Button>
+          </>
         }
       />
 
@@ -224,7 +281,7 @@ export function AdminAccountsPage() {
             value={stats.pending.toLocaleString("vi-VN")}
             icon={KeyRound}
             iconClass="bg-orange-100 text-warning"
-            trend={{ text: "Chưa đăng nhập lần đầu", tone: "warning" }}
+            trend={{ text: "Chưa đổi mật khẩu lần đầu", tone: "warning" }}
           />
         </StaggerItem>
       </Stagger>
@@ -296,108 +353,151 @@ export function AdminAccountsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {rows.map((account) => (
-                  <tr key={account.id} className="transition-colors hover:bg-surface">
-                    <td className="px-4 py-3">
-                      <span className="block font-semibold text-ink">{account.fullName}</span>
-                      <span className="block font-mono text-xs text-ink-soft">{account.username}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge variant={ACCOUNT_ROLE_META[account.role].badge}>{ACCOUNT_ROLE_META[account.role].label}</Badge>
-                    </td>
-                    <td className="px-4 py-3 text-ink-soft">{account.email}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-ink-soft tabular-nums">{account.phone}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-ink-soft tabular-nums">
-                      {account.lastLogin || <span className="text-slate-400">Chưa đăng nhập</span>}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-ink-soft tabular-nums">{account.createdAt}</td>
-                    <td className="px-4 py-3">
-                      <span className="flex flex-wrap items-center gap-1.5">
-                        <Badge variant={ACCOUNT_STATUS_META[account.status].badge}>{ACCOUNT_STATUS_META[account.status].label}</Badge>
-                        {account.deletedAt && <Badge variant="danger">Đã xoá</Badge>}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1">
-                        {account.deletedAt ? (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => restore(account)}
-                            aria-label={`Khôi phục tài khoản ${account.fullName}`}
-                          >
-                            <RotateCcw /> Khôi phục
-                          </Button>
-                        ) : (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label={account.status === "locked" ? `Mở khoá tài khoản ${account.fullName}` : `Khoá tài khoản ${account.fullName}`}
-                              title={account.status === "locked" ? "Mở khoá" : "Khoá"}
-                              onClick={() => setConfirm({ kind: account.status === "locked" ? "unlock" : "lock", account })}
-                            >
-                              {account.status === "locked" ? <Unlock /> : <Lock />}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label={`Đặt lại mật khẩu cho ${account.fullName}`}
-                              title="Đặt lại mật khẩu"
-                              onClick={() => {
-                                setResetting(account)
-                                setResetOpen(true)
-                              }}
-                            >
-                              <KeyRound />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label={`Sửa tài khoản ${account.fullName}`}
-                              title="Sửa"
-                              onClick={() => {
-                                setEditing(account)
-                                setEditOpen(true)
-                              }}
-                            >
-                              <Pencil />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label={`Xoá tài khoản ${account.fullName}`}
-                              title="Xoá"
-                              onClick={() => setConfirm({ kind: "delete", account })}
-                            >
-                              <Trash2 />
-                            </Button>
-                          </>
-                        )}
-                      </div>
+                {listQuery.isLoading && (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-8 text-center text-sm text-ink-soft">
+                      Đang tải danh sách tài khoản…
                     </td>
                   </tr>
-                ))}
-                {rows.length === 0 && <TableEmpty colSpan={8} message="Không có tài khoản nào khớp bộ lọc hiện tại." />}
+                )}
+                {listQuery.isError && (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-8 text-center text-sm text-danger">
+                      {errorMessage(listQuery.error, "Không tải được danh sách tài khoản.")}
+                    </td>
+                  </tr>
+                )}
+                {!listQuery.isLoading && !listQuery.isError &&
+                  rows.map((account) => (
+                    <tr key={account.id} className="transition-colors hover:bg-surface">
+                      <td className="px-4 py-3">
+                        <span className="block font-semibold text-ink">{account.fullName}</span>
+                        <span className="block font-mono text-xs text-ink-soft">{account.username}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="flex flex-wrap gap-1">
+                          {account.roles.map((key) => (
+                            <Badge key={key} variant={ACCOUNT_ROLE_META[key].badge}>
+                              {ACCOUNT_ROLE_META[key].label}
+                            </Badge>
+                          ))}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-ink-soft">{account.email ?? "—"}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-ink-soft tabular-nums">{account.phone ?? "—"}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-ink-soft tabular-nums">
+                        {account.lastLoginAt ? formatDateTime(account.lastLoginAt) : <span className="text-slate-400">Chưa đăng nhập</span>}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-ink-soft tabular-nums">{formatDate(account.createdAt)}</td>
+                      <td className="px-4 py-3">
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <Badge variant={ACCOUNT_STATUS_META[account.status].badge}>{ACCOUNT_STATUS_META[account.status].label}</Badge>
+                          {account.deletedAt && <Badge variant="danger">Đã xoá</Badge>}
+                          {account.mustChangePassword && !account.deletedAt && <Badge variant="warning">Đổi MK lần đầu</Badge>}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          {account.deletedAt ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => restoreMutation.mutate(account.id)}
+                              aria-label={`Khôi phục tài khoản ${account.fullName}`}
+                            >
+                              <RotateCcw /> Khôi phục
+                            </Button>
+                          ) : (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label={account.status === "locked" ? `Mở khoá tài khoản ${account.fullName}` : `Khoá tài khoản ${account.fullName}`}
+                                title={account.status === "locked" ? "Mở khoá" : "Khoá"}
+                                onClick={() => setConfirm({ kind: account.status === "locked" ? "unlock" : "lock", account })}
+                              >
+                                {account.status === "locked" ? <Unlock /> : <Lock />}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`Lịch sử đăng nhập của ${account.fullName}`}
+                                title="Lịch sử đăng nhập"
+                                onClick={() => {
+                                  setHistory(account)
+                                  setHistoryOpen(true)
+                                }}
+                              >
+                                <History />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`Đặt lại mật khẩu cho ${account.fullName}`}
+                                title="Đặt lại mật khẩu"
+                                onClick={() => {
+                                  setResetting(account)
+                                  setResetOpen(true)
+                                }}
+                              >
+                                <KeyRound />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`Sửa tài khoản ${account.fullName}`}
+                                title="Sửa"
+                                onClick={() => {
+                                  setEditing(account)
+                                  setEditOpen(true)
+                                }}
+                              >
+                                <Pencil />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`Xoá tài khoản ${account.fullName}`}
+                                title="Xoá"
+                                onClick={() => setConfirm({ kind: "delete", account })}
+                              >
+                                <Trash2 />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                {!listQuery.isLoading && !listQuery.isError && rows.length === 0 && (
+                  <TableEmpty colSpan={8} message="Không có tài khoản nào khớp bộ lọc hiện tại." />
+                )}
               </tbody>
             </table>
           </div>
 
-          <TablePagination page={currentPage} pageCount={pageCount} total={filtered.length} onPageChange={setPage} />
+          <TablePagination page={page} pageCount={pageCount} total={total} onPageChange={setPage} />
         </Card>
       </Reveal>
 
+      <CreateAccountModal key="create" open={createOpen} onOpenChange={setCreateOpen} onSaved={invalidate} />
+
       <EditAccountModal
-        key={editing?.id ?? "new"}
+        key={editing?.id ?? "edit"}
         open={editOpen}
         onOpenChange={setEditOpen}
         account={editing}
-        onSave={(values) => {
-          if (editing) patch(editing.id, values)
-          setEditOpen(false)
-          toast.success(editing ? "Đã cập nhật tài khoản" : "Đã lưu thông tin", {
-            description: `${values.fullName} · ${ACCOUNT_ROLE_META[values.role].label}`,
-          })
+        onSave={(id, values) => {
+          void usersApi
+            .update(id, { ...values, roles: [values.role] })
+            .then(() => {
+              setEditOpen(false)
+              invalidate()
+              toast.success("Đã cập nhật tài khoản", {
+                description: `${values.fullName} · ${ACCOUNT_ROLE_META[values.role].label}`,
+              })
+            })
+            .catch((err) => toast.error(errorMessage(err, "Không cập nhật được tài khoản")))
         }}
       />
 
@@ -406,12 +506,13 @@ export function AdminAccountsPage() {
         open={resetOpen}
         onOpenChange={setResetOpen}
         account={resetting}
-        onDone={() => {
-          setResetOpen(false)
-          toast.success("Đã đặt lại mật khẩu", {
-            description: "Gửi mật khẩu tạm cho người dùng và yêu cầu đổi ở lần đăng nhập kế tiếp.",
-          })
-        }}
+      />
+
+      <LoginHistoryModal
+        key={history?.id ?? "history"}
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        account={history}
       />
 
       <ConfirmDialog
@@ -428,6 +529,184 @@ export function AdminAccountsPage() {
   )
 }
 
+function CreateAccountModal({
+  open,
+  onOpenChange,
+  onSaved,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSaved: () => void
+}) {
+  const [values, setValues] = useState<EditValues>({ fullName: "", email: "", phone: "", role: "student" })
+  const [username, setUsername] = useState("")
+  const [errors, setErrors] = useState<EditErrors & { username?: string }>({})
+  const [submitting, setSubmitting] = useState(false)
+  const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null)
+
+  const update = (key: keyof EditValues) => (value: string) => {
+    setValues((prev) => ({ ...prev, [key]: value as never }))
+    if (errors[key]) setErrors((prev) => ({ ...prev, [key]: undefined }))
+  }
+
+  const invalid = (key: string) => ({
+    "aria-invalid": Boolean(errors[key as keyof typeof errors]) || undefined,
+    "aria-describedby": errors[key as keyof typeof errors] ? `acc-${key}-error` : undefined,
+  })
+
+  const close = () => {
+    onOpenChange(false)
+    window.setTimeout(() => {
+      setValues({ fullName: "", email: "", phone: "", role: "student" })
+      setUsername("")
+      setErrors({})
+      setSubmitting(false)
+      setTemporaryPassword(null)
+    }, 200)
+  }
+
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    const found: EditErrors & { username?: string } = {}
+    if (username.trim().length < 3) found.username = "Tên đăng nhập tối thiểu 3 ký tự."
+    if (values.fullName.trim().length < 2) found.fullName = "Vui lòng nhập họ và tên."
+    if (!values.email.trim()) found.email = "Vui lòng nhập email."
+    else if (!EMAIL_RE.test(values.email.trim())) found.email = "Email không hợp lệ."
+    if (!values.phone.trim()) found.phone = "Vui lòng nhập số điện thoại."
+    else if (!PHONE_RE.test(values.phone.replace(/[\s.-]/g, ""))) found.phone = "Số điện thoại không hợp lệ (VD: 0909 123 456)."
+    setErrors(found)
+    if (Object.keys(found).length > 0) return
+
+    setSubmitting(true)
+    void usersApi
+      .create({
+        username: username.trim().toLowerCase(),
+        fullName: values.fullName.trim(),
+        email: values.email.trim(),
+        phone: values.phone.trim(),
+        roles: [values.role],
+      })
+      .then((created) => {
+        setTemporaryPassword(created.temporaryPassword)
+        onSaved()
+      })
+      .catch((err) => toast.error(errorMessage(err, "Không tạo được tài khoản")))
+      .finally(() => setSubmitting(false))
+  }
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={close}
+      title="Thêm tài khoản"
+      description="Tạo tài khoản đăng nhập mới. Mật khẩu tạm chỉ hiển thị một lần."
+      icon={<UserCog className="size-6" />}
+      footer={
+        temporaryPassword ? (
+          <Button onClick={close}>Đóng</Button>
+        ) : (
+          <>
+            <Button variant="outline" onClick={() => close()}>Huỷ bỏ</Button>
+            <Button type="submit" form="account-create-form" disabled={submitting}>
+              {submitting ? "Đang tạo…" : "Tạo tài khoản"}
+            </Button>
+          </>
+        )
+      }
+    >
+      {temporaryPassword ? (
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2 rounded-xl bg-green-50 p-4">
+            <p className="flex items-center gap-2 text-sm font-semibold text-success">
+              <ShieldCheck className="size-4" /> Tạo tài khoản thành công
+            </p>
+            <p className="text-xs text-ink-soft">
+              Tài khoản <b>{username}</b> đã được tạo. Mật khẩu tạm bên dưới chỉ hiển thị một lần —
+              hãy gửi cho người dùng và yêu cầu đổi mật khẩu ở lần đăng nhập đầu.
+            </p>
+          </div>
+          <FormField id="acc-new-password" label="Mật khẩu tạm" required hint={<span className="text-xs text-ink-soft">Hiển thị 1 lần</span>}>
+            <div className="flex items-center gap-2">
+              <Input id="acc-new-password" readOnly value={temporaryPassword} className="font-mono font-semibold" />
+              <Button type="button" variant="outline" size="icon" aria-label="Sao chép mật khẩu tạm" onClick={() => copyText(temporaryPassword, "mật khẩu")}>
+                <Copy />
+              </Button>
+            </div>
+          </FormField>
+        </div>
+      ) : (
+        <form id="account-create-form" onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
+          <FormField id="acc-username" label="Tên đăng nhập" required error={errors.username}>
+            <Input
+              id="acc-username"
+              value={username}
+              onChange={(e) => {
+                setUsername(e.target.value)
+                if (errors.username) setErrors((prev) => ({ ...prev, username: undefined }))
+              }}
+              placeholder="hv001"
+              {...invalid("username")}
+            />
+          </FormField>
+
+          <FormField id="acc-fullName" label="Họ và tên" required error={errors.fullName}>
+            <Input
+              id="acc-fullName"
+              value={values.fullName}
+              onChange={(e) => update("fullName")(e.target.value)}
+              placeholder="Nguyễn Văn A"
+              {...invalid("fullName")}
+            />
+          </FormField>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField id="acc-email" label="Email" required error={errors.email}>
+              <Input
+                id="acc-email"
+                type="email"
+                value={values.email}
+                onChange={(e) => update("email")(e.target.value)}
+                placeholder="email@vidu.com"
+                {...invalid("email")}
+              />
+            </FormField>
+            <FormField id="acc-phone" label="Số điện thoại" required error={errors.phone}>
+              <Input
+                id="acc-phone"
+                type="tel"
+                value={values.phone}
+                onChange={(e) => update("phone")(e.target.value)}
+                placeholder="0909 123 456"
+                {...invalid("phone")}
+              />
+            </FormField>
+          </div>
+
+          <FormField id="acc-role" label="Vai trò" required>
+            <select
+              id="acc-role"
+              value={values.role}
+              onChange={(e) => update("role")(e.target.value)}
+              className={cn(fieldBase, "h-12 cursor-pointer appearance-none pr-10")}
+            >
+              {ROLES.map((key) => (
+                <option key={key} value={key}>
+                  {ACCOUNT_ROLE_META[key].label}
+                </option>
+              ))}
+            </select>
+          </FormField>
+
+          <p className="flex items-start gap-2 rounded-xl bg-cream p-3 text-xs leading-relaxed text-ink-soft">
+            <ShieldCheck className="mt-0.5 size-4 shrink-0" />
+            Tài khoản mới ở trạng thái chờ đổi mật khẩu lần đầu. Nhân viên chỉ thấy dữ liệu thuộc phạm vi công việc.
+          </p>
+        </form>
+      )}
+    </Modal>
+  )
+}
+
 function EditAccountModal({
   open,
   onOpenChange,
@@ -436,8 +715,8 @@ function EditAccountModal({
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  account: AdminAccount | null
-  onSave: (values: EditValues) => void
+  account: Account | null
+  onSave: (id: number, values: EditValues) => void
 }) {
   const [values, setValues] = useState<EditValues>(() => ({
     fullName: account?.fullName ?? "",
@@ -470,12 +749,7 @@ function EditAccountModal({
       toast.error("Vui lòng kiểm tra lại thông tin", { description: "Một số trường chưa hợp lệ." })
       return
     }
-    onSave({
-      fullName: values.fullName.trim(),
-      email: values.email.trim(),
-      phone: values.phone.trim(),
-      role: values.role,
-    })
+    if (account) onSave(account.id, values)
   }
 
   return (
@@ -561,27 +835,53 @@ function ResetPasswordModal({
   open,
   onOpenChange,
   account,
-  onDone,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  account: AdminAccount | null
-  onDone: () => void
+  account: Account | null
 }) {
-  const [password, setPassword] = useState(() => (account ? tempPassword(account.username) : ""))
+  const [submitting, setSubmitting] = useState(false)
+  const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const close = () => {
+    onOpenChange(false)
+    window.setTimeout(() => {
+      setSubmitting(false)
+      setTemporaryPassword(null)
+      setError(null)
+    }, 200)
+  }
+
+  const onConfirm = () => {
+    if (!account) return
+    setSubmitting(true)
+    setError(null)
+    void usersApi
+      .resetPassword(account.id)
+      .then((result) => setTemporaryPassword(result.temporaryPassword))
+      .catch((err) => setError(errorMessage(err, "Không đặt lại được mật khẩu")))
+      .finally(() => setSubmitting(false))
+  }
 
   return (
     <Modal
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={close}
       title="Đặt lại mật khẩu"
-      description="Sinh mật khẩu tạm và gửi cho người dùng qua email hoặc Zalo."
+      description="Sinh mật khẩu tạm mới và yêu cầu người dùng đổi ở lần đăng nhập kế tiếp."
       icon={<KeyRound className="size-6" />}
       footer={
-        <>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Huỷ bỏ</Button>
-          <Button onClick={onDone}><ShieldCheck /> Xác nhận đặt lại</Button>
-        </>
+        temporaryPassword ? (
+          <Button onClick={close}>Đóng</Button>
+        ) : (
+          <>
+            <Button variant="outline" onClick={() => close()}>Huỷ bỏ</Button>
+            <Button onClick={onConfirm} disabled={submitting}>
+              <ShieldCheck /> {submitting ? "Đang đặt lại…" : "Xác nhận đặt lại"}
+            </Button>
+          </>
+        )
       }
     >
       <div className="flex flex-col gap-4">
@@ -589,41 +889,119 @@ function ResetPasswordModal({
           <div className="flex items-center justify-between gap-3 rounded-xl bg-surface px-3.5 py-2.5 text-sm">
             <span className="min-w-0">
               <span className="block truncate font-semibold text-ink">{account.fullName}</span>
-              <span className="block truncate text-xs text-ink-soft">{account.email}</span>
+              <span className="block truncate text-xs text-ink-soft">{account.username} · {account.email ?? "—"}</span>
             </span>
             <Badge variant={ACCOUNT_ROLE_META[account.role].badge}>{ACCOUNT_ROLE_META[account.role].label}</Badge>
           </div>
         )}
 
-        <FormField id="acc-temp-password" label="Mật khẩu tạm mới" required hint={<span className="text-xs text-ink-soft">Hiển thị 1 lần</span>}>
-          <div className="flex items-center gap-2">
-            <Input id="acc-temp-password" readOnly value={password} className="font-mono font-semibold" />
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              aria-label="Sao chép mật khẩu tạm"
-              onClick={() => copyText(password, "mật khẩu")}
-            >
-              <Copy />
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              aria-label="Sinh mật khẩu khác"
-              onClick={() => account && setPassword(tempPassword(account.username))}
-            >
-              <RotateCcw />
-            </Button>
+        {error && (
+          <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-danger">
+            {error}
           </div>
-        </FormField>
+        )}
 
-        <p className="flex items-start gap-2 rounded-xl bg-red-50 p-3 text-xs leading-relaxed text-ink-soft">
-          <UserX className="mt-0.5 size-4 shrink-0" />
-          Người dùng buộc phải đổi mật khẩu ở lần đăng nhập đầu tiên. Mọi phiên đang mở sẽ bị kết thúc.
-        </p>
+        {temporaryPassword ? (
+          <FormField id="acc-temp-password" label="Mật khẩu tạm mới" required hint={<span className="text-xs text-ink-soft">Hiển thị 1 lần</span>}>
+            <div className="flex items-center gap-2">
+              <Input id="acc-temp-password" readOnly value={temporaryPassword} className="font-mono font-semibold" />
+              <Button type="button" variant="outline" size="icon" aria-label="Sao chép mật khẩu tạm" onClick={() => copyText(temporaryPassword, "mật khẩu")}>
+                <Copy />
+              </Button>
+            </div>
+          </FormField>
+        ) : (
+          <p className="flex items-start gap-2 rounded-xl bg-red-50 p-3 text-xs leading-relaxed text-ink-soft">
+            <UserX className="mt-0.5 size-4 shrink-0" />
+            Người dùng buộc phải đổi mật khẩu ở lần đăng nhập đầu tiên. Mọi phiên đang mở sẽ bị kết thúc.
+          </p>
+        )}
       </div>
+    </Modal>
+  )
+}
+
+function LoginHistoryModal({
+  open,
+  onOpenChange,
+  account,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  account: Account | null
+}) {
+  const [page, setPage] = useState(1)
+  const historyQuery = useQuery({
+    queryKey: ["users", account?.id ?? 0, "login-history", page],
+    queryFn: () => usersApi.loginHistory(account!.id, page, 10),
+    enabled: open && Boolean(account),
+    placeholderData: keepPreviousData,
+  })
+
+  const items: LoginHistoryRow[] = historyQuery.data?.items ?? []
+  const pageCount = Math.max(1, historyQuery.data?.totalPages ?? 1)
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={(next) => {
+        onOpenChange(next)
+        if (!next) setPage(1)
+      }}
+      title="Lịch sử đăng nhập"
+      description={account ? `Các lần đăng nhập gần đây của ${account.fullName} (${account.username}).` : ""}
+      icon={<History className="size-6" />}
+      footer={<Button onClick={() => onOpenChange(false)}>Đóng</Button>}
+    >
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px] text-left text-sm">
+          <thead className="bg-surface text-xs font-semibold tracking-wide text-ink-soft uppercase">
+            <tr>
+              <th scope="col" className="px-3 py-2 font-semibold">Thời gian</th>
+              <th scope="col" className="px-3 py-2 font-semibold">Kết quả</th>
+              <th scope="col" className="px-3 py-2 font-semibold">IP</th>
+              <th scope="col" className="px-3 py-2 font-semibold">Thiết bị</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {historyQuery.isLoading && (
+              <tr>
+                <td colSpan={4} className="px-3 py-6 text-center text-sm text-ink-soft">
+                  Đang tải lịch sử…
+                </td>
+              </tr>
+            )}
+            {historyQuery.isError && (
+              <tr>
+                <td colSpan={4} className="px-3 py-6 text-center text-sm text-danger">
+                  {errorMessage(historyQuery.error, "Không tải được lịch sử đăng nhập.")}
+                </td>
+              </tr>
+            )}
+            {!historyQuery.isLoading && !historyQuery.isError &&
+              items.map((row) => (
+                <tr key={row.id}>
+                  <td className="px-3 py-2 whitespace-nowrap text-ink-soft tabular-nums">{formatDateTime(row.createdAt)}</td>
+                  <td className="px-3 py-2">
+                    <Badge variant={row.success ? "success" : "danger"}>{row.success ? "Thành công" : "Thất bại"}</Badge>
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap font-mono text-xs text-ink-soft">{row.ip ?? "—"}</td>
+                  <td className="px-3 py-2 max-w-[180px] truncate text-xs text-ink-soft" title={row.userAgent ?? undefined}>
+                    {row.userAgent ?? "—"}
+                  </td>
+                </tr>
+              ))}
+            {!historyQuery.isLoading && !historyQuery.isError && items.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-3 py-6 text-center text-sm text-ink-soft">
+                  Chưa có lần đăng nhập nào.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <TablePagination page={page} pageCount={pageCount} total={historyQuery.data?.total ?? 0} onPageChange={setPage} />
     </Modal>
   )
 }
