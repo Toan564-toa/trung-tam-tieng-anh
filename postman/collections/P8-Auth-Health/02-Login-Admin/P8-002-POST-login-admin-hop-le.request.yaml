@@ -1,0 +1,40 @@
+$kind: http-request
+name: 'P8-002: POST /api/auth/login (admin hợp lệ)'
+order: 1000
+method: POST
+url: '{{baseUrl}}/api/auth/login'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "username": "{{adminUsername}}",
+      "password": "{{adminPassword}}",
+      "portal": "admin"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-002: Login admin trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-002: Không trả trường nhạy cảm", function () {
+        const body = pm.response.json();
+        const forbidden = /passwordhash|password|accesstoken|refreshtoken|authorization/i;
+        function inspect(value) {
+          if (Array.isArray(value)) return value.forEach(inspect);
+          if (value && typeof value === "object") {
+            Object.entries(value).forEach(([key, child]) => {
+              pm.expect(key, "Trường nhạy cảm: " + key).not.to.match(forbidden);
+              inspect(child);
+            });
+          }
+        }
+        inspect(body);
+      });
+      pm.test("P8-002: Cookie phiên được đặt", function () {
+        pm.expect(pm.cookies.has("access_token") || pm.response.headers.has("set-cookie")).to.be.true;
+      });

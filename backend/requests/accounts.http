@@ -64,3 +64,12 @@ DELETE {{baseUrl}}/api/users/{{accountId}}
 
 ### 10. Khôi phục tài khoản
 PATCH {{baseUrl}}/api/users/{{accountId}}/restore
+
+### 11. Mở khóa tạm (clear lockedUntil, reset failedLoginCount) — admin only
+POST {{baseUrl}}/api/users/{{accountId}}/unlock-temp
+
+### 12. Lọc tài khoản đang bị khóa tạm
+GET {{baseUrl}}/api/users?tempLocked=true&page=1&pageSize=20
+
+### 13. Lọc tài khoản KHÔNG bị khóa tạm
+GET {{baseUrl}}/api/users?tempLocked=false&page=1&pageSize=20

@@ -1,0 +1,27 @@
+$kind: http-request
+name: 'P8-002b: POST /api/auth/login (sai mật khẩu)'
+order: 2000
+method: POST
+url: '{{baseUrl}}/api/auth/login'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "username": "{{adminUsername}}",
+      "password": "SaiMatKhau@123",
+      "portal": "admin"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-002b: Login sai mật khẩu trả 401", function () {
+        pm.expect(pm.response.code).to.equal(401);
+      });
+      pm.test("P8-002b: Response có error object", function () {
+        const body = pm.response.json();
+        pm.expect(body).to.have.property("error");
+      });

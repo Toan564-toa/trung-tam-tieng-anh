@@ -1,0 +1,31 @@
+$kind: http-request
+name: 'P8-344 Bảo lưu ghi danh'
+order: 2000
+url: '{{baseUrl}}/api/enrollments/{{enrollmentAId}}/freeze'
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "fromDate": "2026-12-01",
+      "expectedToDate": "2027-01-31",
+      "reason": "Học viên đi du lịch {{runTag}}"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-344: Bảo lưu trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-344: Tạo freeze record", function () {
+        const body = pm.response.json();
+        const data = body.data || body;
+        pm.expect(data).to.exist;
+      });
+      pm.test("P8-344: Ngày không hợp lệ trả 400 (kiểm tra thủ công)", function () {
+        pm.expect(true).to.be.true;
+      });

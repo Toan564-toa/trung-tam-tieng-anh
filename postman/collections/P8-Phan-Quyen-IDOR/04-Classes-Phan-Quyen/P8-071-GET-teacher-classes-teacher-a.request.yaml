@@ -1,0 +1,27 @@
+$kind: http-request
+name: 'P8-071 Teacher A xem danh sách lớp của mình'
+order: 4000
+url: '{{baseUrl}}/api/classes/teacher/classes'
+method: GET
+queryParams:
+  - key: page
+    value: '1'
+  - key: pageSize
+    value: '20'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      // Đăng nhập bằng TEACHER A trước khi chạy
+      pm.test("P8-071: Teacher A GET /teacher/classes trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-071: Chỉ trả lớp của Teacher A", function () {
+        const body = pm.response.json();
+        const items = (body.data && body.data.items) || body.items || [];
+        items.forEach(function(cls) {
+          if (cls.teacherId) {
+            pm.expect(String(cls.teacherId)).to.equal(String(pm.environment.get("teacherAId")));
+          }
+        });
+      });

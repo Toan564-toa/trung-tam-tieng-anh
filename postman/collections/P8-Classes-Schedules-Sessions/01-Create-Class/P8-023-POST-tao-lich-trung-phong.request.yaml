@@ -1,0 +1,38 @@
+$kind: http-request
+name: 'P8-023 Tạo lịch trùng phòng (expect 409/400)'
+order: 4000
+url: '{{baseUrl}}/api/classes'
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "courseId": "{{courseId}}",
+      "classCode": "{{runTag}}-CONFLICT-ROOM",
+      "name": "{{runTag}} Conflict Room",
+      "teacherId": "{{teacherBId}}",
+      "roomId": "{{roomId}}",
+      "startDate": "2026-11-02",
+      "expectedEndDate": "2027-07-02",
+      "maxStudents": 5,
+      "status": "PLANNED",
+      "schedules": [
+        {
+          "weekday": 1,
+          "startTime": "17:30",
+          "endTime": "19:00",
+          "roomId": "{{roomId}}",
+          "timeSlotId": "{{timeSlotId}}"
+        }
+      ]
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-023: Lịch trùng phòng bị từ chối", function () {
+        pm.expect(pm.response.code).to.be.oneOf([409, 400]);
+      });

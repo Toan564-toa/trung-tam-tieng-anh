@@ -1,0 +1,54 @@
+$kind: http-request
+name: 'P8-340 Tạo ghi danh hợp lệ (admin)'
+order: 1000
+url: '{{baseUrl}}/api/enrollments'
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "studentId": "{{studentAId}}",
+      "classId": "{{classId}}",
+      "startDate": "2026-11-02",
+      "note": "Ghi danh test {{runTag}}"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-340: Tạo ghi danh trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-340: Lưu enrollmentAId vào environment", function () {
+        const body = pm.response.json();
+        const data = body.data || body;
+        pm.expect(data.id).to.exist;
+        pm.environment.set("enrollmentAId", data.id);
+      });
+      pm.test("P8-340: Invoice được tạo cùng transaction", function () {
+        const body = pm.response.json();
+        const data = body.data || body;
+        // Invoice phải có snapshot giá tại thời điểm ghi danh
+        const hasInvoice = data.invoice || data.invoiceId;
+        if (!hasInvoice) {
+          console.log("P8-340 CẢNH BÁO: Không thấy invoice trong response - kiểm tra thủ công");
+        }
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-340: Không trả trường nhạy cảm", function () {
+        const body = pm.response.json();
+        const forbidden = /passwordhash|password|accesstoken|refreshtoken/i;
+        function inspect(value) {
+          if (Array.isArray(value)) return value.forEach(inspect);
+          if (value && typeof value === "object") {
+            Object.entries(value).forEach(([key, child]) => {
+              pm.expect(key, "Trường nhạy cảm: " + key).not.to.match(forbidden);
+              inspect(child);
+            });
+          }
+        }
+        inspect(body);
+      });

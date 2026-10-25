@@ -1,0 +1,21 @@
+$kind: http-request
+name: 'P8-232 Cập nhật phòng học'
+order: 3000
+method: PATCH
+url: '{{baseUrl}}/api/rooms/{{roomId}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "capacity": 15
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-232: Cập nhật phòng trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });

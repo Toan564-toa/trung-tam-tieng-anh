@@ -1,4 +1,12 @@
-import 'dotenv/config';
+import { config } from 'dotenv';
+import { resolve } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = resolve(fileURLToPath(import.meta.url), '..');
+config({ path: resolve(__dirname, '..', '.env') });
+console.log('Loaded .env from:', resolve(__dirname, '..', '.env'));
+console.log('SEED_ADMIN_PASSWORD:', process.env.SEED_ADMIN_PASSWORD ? 'SET' : 'NOT SET');
+
 import argon2 from 'argon2';
 import { PrismaClient } from '@prisma/client';
 import { seedDemo } from './demo-seed';

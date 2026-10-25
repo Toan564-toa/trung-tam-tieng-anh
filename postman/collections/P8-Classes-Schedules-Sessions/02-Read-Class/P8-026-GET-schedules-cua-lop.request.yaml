@@ -1,0 +1,17 @@
+$kind: http-request
+name: 'P8-026 Schedules của lớp (kiểm tra route tồn tại)'
+order: 2000
+url: '{{baseUrl}}/api/classes/{{classId}}/schedules'
+method: GET
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-026: GET schedules trả 2xx hoặc 404 (kiểm tra route)", function () {
+        // Nếu 404: route chưa có handler GET, cần đồng bộ docs/API.md
+        const code = pm.response.code;
+        if (code === 404) {
+          console.log("P8-026 CẢNH BÁO: Route GET /classes/:id/schedules chưa có handler - cần đồng bộ API.md");
+        }
+        pm.expect(code).to.be.oneOf([200, 201, 404]);
+      });

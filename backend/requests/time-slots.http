@@ -1,0 +1,30 @@
+### Lấy danh sách ca học (mọi vai trò)
+GET {{baseUrl}}/api/time-slots
+Authorization: Bearer {{token}}
+
+### Tạo ca học (admin)
+POST {{baseUrl}}/api/time-slots
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "code": "C1",
+  "label": "Ca 1: 07:00 - 08:30",
+  "startTime": "07:00",
+  "endTime": "08:30",
+  "sortOrder": 1
+}
+
+### Cập nhật ca học (admin)
+PATCH {{baseUrl}}/api/time-slots/1
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "label": "Ca 1: 07:00 - 08:30 (đã cập nhật)",
+  "endTime": "08:45"
+}
+
+### Xóa ca học (admin) - chỉ xóa được khi không lớp nào đang dùng
+DELETE {{baseUrl}}/api/time-slots/1
+Authorization: Bearer {{adminToken}}

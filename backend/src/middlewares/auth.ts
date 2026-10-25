@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { prisma } from '../config/prisma';
 import { HttpError } from '../utils/httpError';
 import { ACCESS_COOKIE, verifyAccessToken } from '../utils/tokens';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 
 function extractToken(req: Request): string | null {
   const fromCookie = req.cookies?.[ACCESS_COOKIE] as string | undefined;
@@ -9,6 +10,35 @@ function extractToken(req: Request): string | null {
   const header = req.headers.authorization;
   if (header?.startsWith('Bearer ')) return header.slice(7);
   return null;
+}
+
+// Retry query khi gặp lỗi kết nối transient (P1017 - Neon đóng connection)
+async function findUserWithRetry(userId: number, maxRetries = 3) {
+  let lastError: Error | null = null;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          status: true,
+          deletedAt: true,
+          tokenVersion: true,
+          mustChangePassword: true,
+          roles: { select: { role: { select: { code: true } } } },
+        },
+      });
+    } catch (error) {
+      lastError = error as Error;
+      // P1017: Server has closed the connection — retry
+      if (error instanceof PrismaClientKnownRequestError && error.code === 'P1017' && attempt < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, 50 * attempt)); // backoff ngắn
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw lastError;
 }
 
 // Bắt buộc đăng nhập. Kiểm tra lại trạng thái tài khoản trong DB để khóa/vô hiệu có hiệu lực ngay.
@@ -24,17 +54,7 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
   }
 
   const userId = Number(payload.sub);
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      status: true,
-      deletedAt: true,
-      tokenVersion: true,
-      mustChangePassword: true,
-      roles: { select: { role: { select: { code: true } } } },
-    },
-  });
+  const user = await findUserWithRetry(userId);
 
   if (!user || user.deletedAt || user.status !== 'ACTIVE') throw HttpError.unauthorized();
   if (payload.ver !== user.tokenVersion) throw HttpError.unauthorized('Phiên đăng nhập đã hết hiệu lực');

@@ -1,0 +1,35 @@
+$kind: http-request
+name: P8-024 Tạo lịch trùng giáo viên (expect 409/400)
+order: 5000
+url: "{{baseUrl}}/api/classes"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+        "courseId": {{courseId}},
+        "classCode": "{{runTag}}-CONFLICT-TEACHER",
+        "name": "{{runTag}} Conflict Teacher",
+        "teacherId": {{teacherAId}},
+        "roomId": {{roomId}},
+        "startDate": "2026-11-02",
+        "expectedEndDate": "2027-07-02",
+        "maxStudents": 5,
+        "status": "PLANNED",
+        "schedules": [
+            {
+                "weekday": 1,
+                "timeSlotId": 3,
+                "roomId": 6
+            }
+        ]
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("P8-024: Lịch trùng giáo viên bị từ chối", function () {
+        pm.expect(pm.response.code).to.be.oneOf([409, 400]);
+      });
+    language: text/javascript

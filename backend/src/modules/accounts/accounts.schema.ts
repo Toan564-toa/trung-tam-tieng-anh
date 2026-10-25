@@ -9,6 +9,7 @@ const email = z.string().trim().email().max(200).optional().nullable();
 export const listAccountsSchema = z.object({
   role: z.enum(['admin', 'staff', 'teacher', 'student', 'guardian']).optional(),
   status: z.enum(['active', 'locked', 'pending', 'archived']).optional(),
+  tempLocked: z.enum(['true', 'false']).optional(),
   query: z.string().trim().max(100).optional(),
   onlyDeleted: z.enum(['true', 'false']).default('false'),
   page: z.coerce.number().int().min(1).default(1),

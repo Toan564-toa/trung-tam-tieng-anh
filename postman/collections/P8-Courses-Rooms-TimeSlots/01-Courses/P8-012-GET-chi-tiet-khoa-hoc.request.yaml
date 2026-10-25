@@ -1,0 +1,17 @@
+$kind: http-request
+name: 'P8-012 Chi tiết khóa học (admin)'
+order: 3000
+method: GET
+url: '{{baseUrl}}/api/courses/{{courseId}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-012: Chi tiết khóa học trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-012: Trả đúng courseId", function () {
+        const body = pm.response.json();
+        const data = body.data || body;
+        pm.expect(String(data.id)).to.equal(String(pm.environment.get("courseId")));
+      });

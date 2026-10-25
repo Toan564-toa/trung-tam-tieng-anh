@@ -1,0 +1,25 @@
+$kind: http-request
+name: 'P8-244 Tạo ca học giờ sai (expect 400)'
+order: 5000
+method: POST
+url: '{{baseUrl}}/api/time-slots'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "code": "{{runTag}}-INVALID-TS",
+      "label": "Ca học giờ sai",
+      "startTime": "19:00",
+      "endTime": "17:30",
+      "sortOrder": 99
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-244: startTime >= endTime trả 400", function () {
+        pm.expect(pm.response.code).to.equal(400);
+      });

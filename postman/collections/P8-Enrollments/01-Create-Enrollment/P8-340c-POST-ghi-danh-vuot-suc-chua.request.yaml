@@ -1,0 +1,29 @@
+$kind: http-request
+name: 'P8-340c Ghi danh vượt sức chứa (expect 409)'
+order: 3000
+url: '{{baseUrl}}/api/enrollments'
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "studentId": "{{studentBId}}",
+      "classId": "{{classId}}",
+      "startDate": "2026-11-02",
+      "note": "Ghi danh thứ 3 vượt maxStudents=2 {{runTag}}"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-340c: Vượt sức chứa trả 409", function () {
+        // Lớp A có maxStudents=2, đã có 2 học viên
+        // Chạy sau khi đã ghi danh studentA và studentB
+        pm.expect(pm.response.code).to.equal(409);
+      });
+      pm.test("P8-340c: Sĩ số không vượt giới hạn", function () {
+        pm.expect(pm.response.code).not.to.be.oneOf([200, 201]);
+      });

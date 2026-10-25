@@ -1,0 +1,31 @@
+$kind: http-request
+name: 'P8-240 Tạo ca học hợp lệ'
+order: 1000
+method: POST
+url: '{{baseUrl}}/api/time-slots'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "code": "{{runTag}}-C1",
+      "label": "Ca chiều {{runTag}}",
+      "startTime": "17:30",
+      "endTime": "19:00",
+      "sortOrder": 10
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-240: Tạo ca học trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-240: Lưu timeSlotId vào environment", function () {
+        const body = pm.response.json();
+        const id = (body.data && body.data.id) || body.id;
+        pm.expect(id).to.exist;
+        pm.environment.set("timeSlotId", id);
+      });

@@ -1,0 +1,30 @@
+$kind: http-request
+name: 'P8-003: GET /api/auth/me (sau khi đã login)'
+order: 1000
+method: GET
+url: '{{baseUrl}}/api/auth/me'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-003: GET /me sau login trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-003: Trả đúng thông tin người dùng", function () {
+        const body = pm.response.json();
+        pm.expect(body.data || body).to.have.property("username");
+      });
+      pm.test("P8-003: Không trả trường nhạy cảm", function () {
+        const body = pm.response.json();
+        const forbidden = /passwordhash|password|accesstoken|refreshtoken/i;
+        function inspect(value) {
+          if (Array.isArray(value)) return value.forEach(inspect);
+          if (value && typeof value === "object") {
+            Object.entries(value).forEach(([key, child]) => {
+              pm.expect(key, "Trường nhạy cảm: " + key).not.to.match(forbidden);
+              inspect(child);
+            });
+          }
+        }
+        inspect(body);
+      });

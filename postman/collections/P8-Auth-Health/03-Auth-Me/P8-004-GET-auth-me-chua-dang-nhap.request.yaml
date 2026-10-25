@@ -1,0 +1,12 @@
+$kind: http-request
+name: 'P8-004: GET /api/auth/me (chưa đăng nhập)'
+order: 2000
+method: GET
+url: '{{baseUrl}}/api/auth/me'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-004: GET /me chưa đăng nhập trả 401", function () {
+        pm.expect(pm.response.code).to.equal(401);
+      });

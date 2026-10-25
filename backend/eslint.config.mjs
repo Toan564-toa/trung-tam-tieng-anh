@@ -4,7 +4,7 @@ import tseslint from 'typescript-eslint';
 export default tseslint.config(
   // Object này phải CHỈ có `ignores` thì mới là ignore toàn cục của ESLint.
   {
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'src/types/express.d.ts'],
+    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'src/types/express.d.ts', 'tmp-*.mjs'],
   },
   {
     linterOptions: {

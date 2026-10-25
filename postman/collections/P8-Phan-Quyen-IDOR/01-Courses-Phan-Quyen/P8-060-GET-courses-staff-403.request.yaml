@@ -1,0 +1,13 @@
+$kind: http-request
+name: P8-060 GET courses bằng staff (expect 403)
+order: 1000
+url: "{{baseUrl}}/api/courses"
+method: GET
+scripts:
+  - type: afterResponse
+    code: |-
+      // Đăng nhập bằng STAFF trước khi chạy request này
+      pm.test("P8-060: Staff GET /courses trả 403", function () {
+        pm.expect(pm.response.code).to.equal(403);
+      });
+    language: text/javascript

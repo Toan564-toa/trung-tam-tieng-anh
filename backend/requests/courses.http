@@ -1,0 +1,64 @@
+### Lấy danh sách khóa học (admin)
+GET {{baseUrl}}/api/courses?page=1&pageSize=20
+Authorization: Bearer {{adminToken}}
+
+### Tạo khóa học (admin)
+POST {{baseUrl}}/api/courses
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "code": "ENG001",
+  "slug": "english-beginner",
+  "name": "Tiếng Anh cơ bản",
+  "level": "BEGINNER",
+  "language": "English",
+  "description": "Khóa học tiếng Anh cho người mới bắt đầu",
+  "totalSessions": 64,
+  "sessionsPerWeek": 2,
+  "durationMonths": 8,
+  "listPrice": 5000000,
+  "minAge": 6,
+  "maxAge": 12,
+  "targetStudents": 20,
+  "audience": "Học sinh tiểu học",
+  "schedule": ["Thứ 2 & Thứ 4 17:30-19:00", "Thứ 3 & Thứ 5 17:30-19:00"],
+  "highlights": ["Giáo viên bản xứ", "Học phí hợp lý"],
+  "featured": true,
+  "levelTone": "blue",
+  "isPublic": true,
+  "status": "PUBLISHED"
+}
+
+### Lấy chi tiết khóa học (admin)
+GET {{baseUrl}}/api/courses/1
+Authorization: Bearer {{adminToken}}
+
+### Cập nhật khóa học (admin)
+PATCH {{baseUrl}}/api/courses/1
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "name": "Tiếng Anh cơ bản (đã cập nhật)",
+  "listPrice": 5500000
+}
+
+### Đổi trạng thái khóa học (admin)
+PATCH {{baseUrl}}/api/courses/1/status
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "status": "ARCHIVED"
+}
+
+### Xóa mềm khóa học (admin)
+DELETE {{baseUrl}}/api/courses/1
+Authorization: Bearer {{adminToken}}
+
+### Danh sách khóa học công khai (landing page - không cần auth)
+GET {{baseUrl}}/api/public/courses?level=BEGINNER
+
+### Chi tiết khóa học công khai (landing page)
+GET {{baseUrl}}/api/public/courses/1

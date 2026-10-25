@@ -1,0 +1,39 @@
+$kind: http-request
+name: 'P8-032 Thêm session thủ công (dùng timeSlotId)'
+order: 1000
+url: "{{baseUrl}}/api/classes/{{classId}}/sessions"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "lessonNo": 65,
+      "date": "2026-11-03",
+      "timeSlotId": 6,
+      "roomId": {{roomId}},
+      "teacherId": {{teacherAId}},
+      "topic": "Unit 1: Greetings",
+      "unit": "Unit 1",
+      "note": "Buổi học đầu tiên {{runTag}}"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-032: Thêm session thủ công trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-032: Auto-fill giờ từ timeSlotId (CA6: 17:00-18:30)", function () {
+        const body = pm.response.json();
+        const data = body.data || body;
+        pm.expect(data.startTime).to.equal('17:00');
+        pm.expect(data.endTime).to.equal('18:30');
+      });
+      pm.test("P8-032: Trả đúng các trường theo hợp đồng", function () {
+        const body = pm.response.json();
+        const data = body.data || body;
+        pm.expect(data).to.have.property("id");
+        pm.expect(data).to.have.property("date");
+      });

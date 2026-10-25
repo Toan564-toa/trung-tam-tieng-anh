@@ -1,0 +1,21 @@
+$kind: http-request
+name: 'P8-018 Tạo khóa học thiếu trường (expect 400)'
+order: 9000
+method: POST
+url: '{{baseUrl}}/api/courses'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "Khóa học thiếu code"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-018: Thiếu trường bắt buộc trả 400", function () {
+        pm.expect(pm.response.code).to.equal(400);
+      });

@@ -1,0 +1,21 @@
+$kind: http-request
+name: 'P8-234 Tạo phòng thiếu trường (expect 400)'
+order: 5000
+method: POST
+url: '{{baseUrl}}/api/rooms'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "capacity": 10
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-234: Thiếu trường bắt buộc trả 400", function () {
+        pm.expect(pm.response.code).to.equal(400);
+      });

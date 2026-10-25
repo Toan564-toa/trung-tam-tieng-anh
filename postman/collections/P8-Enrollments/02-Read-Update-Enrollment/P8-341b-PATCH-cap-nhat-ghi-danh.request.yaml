@@ -1,0 +1,21 @@
+$kind: http-request
+name: 'P8-341b Cập nhật ghi danh'
+order: 2000
+url: '{{baseUrl}}/api/enrollments/{{enrollmentAId}}'
+method: PATCH
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "note": "Ghi chú cập nhật {{runTag}}"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-341b: Cập nhật ghi danh trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });

@@ -1,0 +1,172 @@
+### Lấy danh sách lớp học (admin, staff)
+GET {{baseUrl}}/api/classes?page=1&pageSize=20&status=ACTIVE
+Authorization: Bearer {{adminToken}}
+
+### Lấy danh sách buổi học hôm nay (admin, staff)
+GET {{baseUrl}}/api/classes/today
+Authorization: Bearer {{adminToken}}
+
+### Tạo lớp học (admin)
+POST {{baseUrl}}/api/classes
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "courseId": 1,
+  "classCode": "ENG001-A",
+  "name": "Tiếng Anh cơ bản - Lớp A",
+  "teacherId": 1,
+  "roomId": 1,
+  "advisorId": 1,
+  "startDate": "2026-10-15",
+  "expectedEndDate": "2027-06-15",
+  "maxStudents": 20,
+  "status": "PLANNED",
+  "schedules": [
+    {
+      "weekday": 1,
+      "startTime": "17:30",
+      "endTime": "19:00",
+      "roomId": 1,
+      "timeSlotId": 1
+    },
+    {
+      "weekday": 3,
+      "startTime": "17:30",
+      "endTime": "19:00",
+      "roomId": 1,
+      "timeSlotId": 1
+    }
+  ]
+}
+
+### Lấy chi tiết lớp học (admin, staff, teacher)
+GET {{baseUrl}}/api/classes/1
+Authorization: Bearer {{adminToken}}
+
+### Cập nhật lớp học (admin)
+PATCH {{baseUrl}}/api/classes/1
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "name": "Tiếng Anh cơ bản - Lớp A (đã cập nhật)",
+  "maxStudents": 25
+}
+
+### Đổi trạng thái lớp học (admin)
+PATCH {{baseUrl}}/api/classes/1/status
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "status": "ACTIVE"
+}
+
+### Xóa mềm lớp học (admin)
+DELETE {{baseUrl}}/api/classes/1
+Authorization: Bearer {{adminToken}}
+
+### Đổi giáo viên chính (admin)
+PATCH {{baseUrl}}/api/classes/1/teacher
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "teacherId": 2,
+  "fromDate": "2026-11-01"
+}
+
+### Sinh buổi học từ thời khóa biểu (admin, staff)
+POST {{baseUrl}}/api/classes/1/generate-sessions
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "startDate": "2026-10-15",
+  "weekdays": [1, 3],
+  "startTime": "17:30",
+  "endTime": "19:00",
+  "roomId": 1,
+  "skipHolidays": ["2026-12-25", "2027-01-01"]
+}
+
+### Danh sách học viên trong lớp (admin, staff, teacher)
+GET {{baseUrl}}/api/classes/1/students?page=1&pageSize=20
+Authorization: Bearer {{adminToken}}
+
+### Danh sách buổi học của lớp (admin, staff, teacher)
+GET {{baseUrl}}/api/classes/1/sessions?page=1&pageSize=20
+Authorization: Bearer {{adminToken}}
+
+### Thêm buổi học thủ công (admin, staff)
+POST {{baseUrl}}/api/classes/1/sessions
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "lessonNo": 1,
+  "date": "2026-10-15",
+  "startTime": "17:30",
+  "endTime": "19:00",
+  "roomId": 1,
+  "teacherId": 1,
+  "topic": "Unit 1: Greetings",
+  "unit": "Unit 1",
+  "note": "Buổi học đầu tiên"
+}
+
+### Cập nhật buổi học (admin, staff)
+PATCH {{baseUrl}}/api/classes/1/sessions/1
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "topic": "Unit 1: Greetings (đã cập nhật)",
+  "note": "Đã thêm bài tập về nhà"
+}
+
+### Thêm lịch học tuần (admin)
+POST {{baseUrl}}/api/classes/1/schedules
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "weekday": 5,
+  "startTime": "17:30",
+  "endTime": "19:00",
+  "roomId": 1,
+  "timeSlotId": 1,
+  "effectiveFrom": "2026-11-01",
+  "effectiveTo": null
+}
+
+### Cập nhật lịch học (admin)
+PATCH {{baseUrl}}/api/schedules/1
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "roomId": 2,
+  "timeSlotId": 2
+}
+
+### Xóa lịch học (admin)
+DELETE {{baseUrl}}/api/schedules/1
+Authorization: Bearer {{adminToken}}
+
+### Kiểm tra trùng lịch (admin, staff)
+GET {{baseUrl}}/api/classes/conflicts?weekday=1&startTime=17:30&endTime=19:00&roomId=1&teacherId=1&excludeClassId=1
+Authorization: Bearer {{adminToken}}
+
+### Thời khóa biểu tổng hợp (admin, staff, teacher)
+GET {{baseUrl}}/api/classes/timetable?from=2026-10-15&to=2026-10-21&page=1&pageSize=50
+Authorization: Bearer {{adminToken}}
+
+### Giáo viên: Lấy danh sách lớp của mình
+GET {{baseUrl}}/api/classes/teacher/classes?page=1&pageSize=20
+Authorization: Bearer {{teacherToken}}
+
+### Giáo viên: Lấy học viên trong lớp của mình
+GET {{baseUrl}}/api/classes/teacher/classes/1/students?page=1&pageSize=20
+Authorization: Bearer {{teacherToken}}

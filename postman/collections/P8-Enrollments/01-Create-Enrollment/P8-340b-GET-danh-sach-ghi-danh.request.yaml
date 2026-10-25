@@ -1,0 +1,28 @@
+$kind: http-request
+name: 'P8-340b Danh sách ghi danh (admin)'
+order: 2000
+url: '{{baseUrl}}/api/enrollments?page=1&pageSize=20&status=ACTIVE'
+method: GET
+queryParams:
+  - key: page
+    value: '1'
+  - key: pageSize
+    value: '20'
+  - key: status
+    value: ACTIVE
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-340b: Danh sách ghi danh trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-340b: Response có pagination envelope", function () {
+        const body = pm.response.json();
+        const data = body.data || body;
+        pm.expect(data).to.have.property("items");
+        pm.expect(data).to.have.property("total");
+        pm.expect(data).to.have.property("page");
+        pm.expect(data).to.have.property("pageSize");
+        pm.expect(data).to.have.property("totalPages");
+      });

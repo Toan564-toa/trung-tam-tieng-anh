@@ -1,0 +1,32 @@
+$kind: http-request
+name: 'P8-022 Tạo lớp FK không tồn tại (expect 400/404)'
+order: 3000
+url: '{{baseUrl}}/api/classes'
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "courseId": 999999,
+      "classCode": "{{runTag}}-INVALID-FK",
+      "name": "{{runTag}} Invalid FK",
+      "teacherId": 999999,
+      "roomId": 999999,
+      "startDate": "2026-11-02",
+      "expectedEndDate": "2026-10-01",
+      "maxStudents": 5,
+      "status": "PLANNED"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-022: FK không tồn tại hoặc ngày sai trả 400/404", function () {
+        pm.expect(pm.response.code).to.be.oneOf([400, 404]);
+      });
+      pm.test("P8-022: Không tạo bản ghi dở dang", function () {
+        pm.expect(pm.response.code).not.to.be.oneOf([200, 201]);
+      });

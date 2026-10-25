@@ -1,0 +1,13 @@
+$kind: http-request
+name: 'P8-063 GET rooms bằng teacher (expect 403)'
+order: 1000
+url: '{{baseUrl}}/api/rooms'
+method: GET
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      // Đăng nhập bằng TEACHER A trước khi chạy
+      pm.test("P8-063: Teacher GET /rooms trả 403", function () {
+        pm.expect(pm.response.code).to.equal(403);
+      });

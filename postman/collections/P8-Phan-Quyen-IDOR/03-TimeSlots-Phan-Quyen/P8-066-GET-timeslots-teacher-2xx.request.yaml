@@ -1,0 +1,13 @@
+$kind: http-request
+name: 'P8-066 GET time-slots bằng teacher (expect 2xx)'
+order: 1000
+url: '{{baseUrl}}/api/time-slots'
+method: GET
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      // Đăng nhập bằng TEACHER A trước khi chạy
+      pm.test("P8-066: Teacher GET /time-slots trả 2xx (mọi vai trò được đọc)", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });

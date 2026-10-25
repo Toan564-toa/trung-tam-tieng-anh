@@ -1,0 +1,33 @@
+$kind: http-request
+name: P8-030 Generate sessions lần 2 (không nhân đôi)
+order: 2000
+url: "{{baseUrl}}/api/classes/{{classId}}/generate-sessions"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "startDate": "2026-11-02",
+      "weekdays": [1, 3],
+      "timeSlotId": 6,
+      "roomId": {{roomId}},
+      "skipHolidays": ["2026-12-25", "2027-01-01", "2027-01-29", "2027-01-30"]
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("P8-030: Generate lần 2 không lỗi server", function () {
+        pm.expect(pm.response.code).not.to.equal(500);
+      });
+      pm.test("P8-030: Generate lần 2 trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-030: Không nhân đôi buổi học - total vẫn đúng 64", function () {
+        const body = pm.response.json();
+        const data = body.data || body;
+        // Gọi lần 2 phải xóa rồi sinh lại → total vẫn = 64, không phải 128
+        const count = data.total ?? (data.items && data.items.length);
+        pm.expect(count, "Gọi lần 2 không được nhân đôi, total phải = 64").to.equal(64);
+      });

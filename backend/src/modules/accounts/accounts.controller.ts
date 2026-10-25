@@ -28,6 +28,12 @@ export async function setStatus(req: Request, res: Response) {
   res.json({ data: await service.setAccountStatus(req.user!.id, id, accountStatusSchema.parse(req.body), req.ip) });
 }
 
+// Mở khóa tạm (clear lockedUntil) — admin only
+export async function unlockTemp(req: Request, res: Response) {
+  const { id } = accountIdSchema.parse(req.params);
+  res.json({ data: await service.unlockTempAccount(req.user!.id, id, req.ip) });
+}
+
 export async function resetPassword(req: Request, res: Response) {
   const { id } = accountIdSchema.parse(req.params);
   res.json({ data: await service.resetAccountPassword(req.user!.id, id, req.ip) });

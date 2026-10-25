@@ -1,0 +1,28 @@
+$kind: http-request
+name: 'P8-019 Tạo khóa học giá âm (expect 400)'
+order: 10000
+method: POST
+url: '{{baseUrl}}/api/courses'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "code": "{{runTag}}-INVALID",
+      "slug": "{{runTag}}-invalid",
+      "name": "Khóa học giá âm",
+      "totalSessions": 64,
+      "sessionsPerWeek": 2,
+      "durationMonths": 8,
+      "listPrice": -1000,
+      "status": "PUBLISHED"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-019: Giá âm trả 400", function () {
+        pm.expect(pm.response.code).to.equal(400);
+      });

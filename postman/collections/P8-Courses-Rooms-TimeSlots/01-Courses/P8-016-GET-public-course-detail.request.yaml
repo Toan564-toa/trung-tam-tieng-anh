@@ -1,0 +1,12 @@
+$kind: http-request
+name: 'P8-016 Public course detail (không auth)'
+order: 7000
+method: GET
+url: '{{baseUrl}}/api/public/courses/{{courseId}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-016: Public course detail trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });

@@ -8,6 +8,7 @@ accountsRoutes.get('/', controller.list);
 accountsRoutes.post('/', controller.create);
 accountsRoutes.patch('/:id', controller.update);
 accountsRoutes.patch('/:id/status', controller.setStatus);
+accountsRoutes.post('/:id/unlock-temp', controller.unlockTemp);
 accountsRoutes.post('/:id/reset-password', controller.resetPassword);
 accountsRoutes.get('/:id/login-history', controller.loginHistory);
 accountsRoutes.delete('/:id', controller.remove);

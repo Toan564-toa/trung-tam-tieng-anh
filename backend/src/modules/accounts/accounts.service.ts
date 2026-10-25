@@ -24,6 +24,8 @@ const accountSelect = {
   email: true,
   phone: true,
   status: true,
+  failedLoginCount: true,
+  lockedUntil: true,
   mustChangePassword: true,
   lastLoginAt: true,
   createdAt: true,
@@ -36,6 +38,7 @@ type AccountRecord = Prisma.UserGetPayload<{ select: typeof accountSelect }>;
 function toAccountDto(user: AccountRecord) {
   const roleCodes = user.roles.map(({ role }) => role.code);
   const status = user.deletedAt ? 'archived' : user.status === 'DISABLED' ? 'archived' : user.status.toLowerCase();
+  const tempLocked = user.lockedUntil && user.lockedUntil > new Date();
   return {
     id: user.id,
     username: user.username,
@@ -45,10 +48,13 @@ function toAccountDto(user: AccountRecord) {
     role: roleCodes[0] ?? 'student',
     roles: roleCodes,
     status,
+    tempLocked,
+    lockedUntil: user.lockedUntil,
+    failedLoginCount: user.failedLoginCount,
+    mustChangePassword: user.mustChangePassword,
     lastLoginAt: user.lastLoginAt,
     createdAt: user.createdAt,
     deletedAt: user.deletedAt,
-    mustChangePassword: user.mustChangePassword,
   };
 }
 
@@ -75,6 +81,8 @@ export async function listAccounts(input: AccountListInput) {
   if (input.status === 'locked') predicates.push(Prisma.sql`u.status::text = 'LOCKED'`);
   if (input.status === 'pending') predicates.push(Prisma.sql`u.status::text = 'PENDING'`);
   if (input.status === 'archived') predicates.push(Prisma.sql`u.status::text IN ('DISABLED', 'ARCHIVED')`);
+  if (input.tempLocked === 'true') predicates.push(Prisma.sql`u.locked_until IS NOT NULL AND u.locked_until > NOW()`);
+  if (input.tempLocked === 'false') predicates.push(Prisma.sql`u.locked_until IS NULL OR u.locked_until <= NOW()`);
   if (input.query)
     predicates.push(Prisma.sql`ttnn_unaccent(lower(concat_ws(' ', u.username, u.full_name, u.email, u.phone)))
     LIKE '%' || ttnn_unaccent(lower(${input.query})) || '%'`);
@@ -204,6 +212,29 @@ export async function setAccountStatus(actorId: number, accountId: number, input
     );
     return toAccountDto(updated);
   });
+}
+
+// Mở khóa tạm (clear lockedUntil, reset failedLoginCount) — admin only
+export async function unlockTempAccount(actorId: number, accountId: number, ip?: string) {
+  if (actorId === accountId) throw HttpError.forbidden('Không thể tự mở khóa tài khoản của mình');
+  const user = await prisma.user.findUnique({ where: { id: accountId }, select: accountSelect });
+  if (!user || user.deletedAt) throw HttpError.notFound('Không tìm thấy tài khoản');
+  if (!user.lockedUntil || user.lockedUntil <= new Date()) {
+    throw HttpError.badRequest('Tài khoản không đang bị khóa tạm');
+  }
+  const updated = await prisma.$transaction(async (tx) => {
+    const u = await tx.user.update({
+      where: { id: accountId },
+      data: { lockedUntil: null, failedLoginCount: 0 },
+      select: accountSelect,
+    });
+    await writeAudit(
+      { userId: actorId, action: 'unlock_temp', tableName: 'users', recordId: accountId, newData: { lockedUntil: null }, ip },
+      tx,
+    );
+    return toAccountDto(u);
+  });
+  return updated;
 }
 
 export async function resetAccountPassword(actorId: number, accountId: number, ip?: string) {

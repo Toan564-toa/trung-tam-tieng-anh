@@ -1,0 +1,12 @@
+$kind: http-request
+name: 'P8-008: POST /api/auth/logout'
+order: 4000
+method: POST
+url: '{{baseUrl}}/api/auth/logout'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-008: Logout trả 2xx hoặc 204", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 204]);
+      });

@@ -1,0 +1,20 @@
+$kind: http-request
+name: 'P8-080 IDOR: Teacher A xem lớp B'
+order: 1000
+url: '{{baseUrl}}/api/classes/{{classBId}}'
+method: GET
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      // Đăng nhập bằng TEACHER A trước khi chạy
+      // classBId là lớp do Teacher B phụ trách
+      pm.test("P8-080 IDOR: Teacher A không được xem lớp B", function () {
+        pm.expect(pm.response.code).to.be.oneOf([403, 404]);
+      });
+      pm.test("P8-080 IDOR: Response không chứa tên/email học viên lớp B", function () {
+        if (pm.response.code === 200) {
+          pm.expect.fail("IDOR VULNERABILITY DETECTED: Teacher A có thể đọc lớp B!");
+        }
+        pm.expect(pm.response.code).to.be.oneOf([403, 404]);
+      });

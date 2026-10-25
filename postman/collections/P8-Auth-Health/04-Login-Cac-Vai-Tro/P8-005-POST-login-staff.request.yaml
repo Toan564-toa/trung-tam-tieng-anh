@@ -1,0 +1,23 @@
+$kind: http-request
+name: 'P8-005: POST /api/auth/login (staff)'
+order: 1000
+method: POST
+url: '{{baseUrl}}/api/auth/login'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "username": "{{staffUsername}}",
+      "password": "{{staffPassword}}",
+      "portal": "client"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-005: Login staff trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });

@@ -1,0 +1,13 @@
+$kind: http-request
+name: P8-062 GET courses chưa đăng nhập (expect 401)
+order: 3000
+url: "{{baseUrl}}/api/courses"
+method: GET
+scripts:
+  - type: afterResponse
+    code: |-
+      // KHÔNG đăng nhập - chạy sau khi đã logout hoặc xóa cookie
+      pm.test("P8-062: Chưa đăng nhập GET /courses trả 401", function () {
+        pm.expect(pm.response.code).to.equal(401);
+      });
+    language: text/javascript

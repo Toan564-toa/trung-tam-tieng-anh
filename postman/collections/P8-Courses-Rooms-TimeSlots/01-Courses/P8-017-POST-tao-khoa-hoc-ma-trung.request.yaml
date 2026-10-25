@@ -1,0 +1,32 @@
+$kind: http-request
+name: 'P8-017 Tạo khóa học mã trùng (expect 409)'
+order: 8000
+method: POST
+url: '{{baseUrl}}/api/courses'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "code": "{{runTag}}-ENG001",
+      "slug": "{{runTag}}-english-beginner-dup",
+      "name": "Khóa học trùng mã",
+      "totalSessions": 64,
+      "sessionsPerWeek": 2,
+      "durationMonths": 8,
+      "listPrice": 5000000,
+      "status": "PUBLISHED"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-017: Mã trùng trả 409", function () {
+        pm.expect(pm.response.code).to.equal(409);
+      });
+      pm.test("P8-017: Response có error object", function () {
+        const body = pm.response.json();
+        pm.expect(body).to.have.property("error");
+      });

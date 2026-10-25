@@ -1,0 +1,26 @@
+$kind: http-request
+name: 'P8-067 POST time-slots bằng teacher (expect 403)'
+order: 2000
+url: '{{baseUrl}}/api/time-slots'
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "code": "{{runTag}}-TEACHER-TS",
+      "label": "Ca teacher tạo",
+      "startTime": "08:00",
+      "endTime": "09:30",
+      "sortOrder": 99
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      // Đăng nhập bằng TEACHER A trước khi chạy
+      pm.test("P8-067: Teacher POST /time-slots trả 403", function () {
+        pm.expect(pm.response.code).to.equal(403);
+      });

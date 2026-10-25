@@ -1,69 +1,11 @@
-### REST Client của VS Code. Chạy sau auth.http (đã đăng nhập).
-### /api/me/* dùng được cho mọi vai trò; /api/profile-change-requests chỉ admin/staff.
+### Học viên: Lấy danh sách ghi danh của mình
+GET {{baseUrl}}/api/me/enrollments?page=1&pageSize=20
+Authorization: Bearer {{studentToken}}
 
-@baseUrl = http://localhost:4000
+### Học viên: Lấy danh sách 64 buổi học kèm trạng thái điểm danh
+GET {{baseUrl}}/api/me/lessons?page=1&pageSize=100
+Authorization: Bearer {{studentToken}}
 
-### 1. Xem hồ sơ của mình (role + profile theo vai trò)
-GET {{baseUrl}}/api/me/profile
-
-### 2. Sửa trực tiếp phone/email/address (học viên)
-PATCH {{baseUrl}}/api/me/profile
-Content-Type: application/json
-
-{
-  "phone": "0900000099",
-  "address": "Hà Nội"
-}
-
-### 3. Sửa fullName/identityNo -> tạo yêu cầu duyệt, không áp dụng ngay
-PATCH {{baseUrl}}/api/me/profile
-Content-Type: application/json
-
-{
-  "fullName": "Nguyễn Văn B",
-  "identityNo": "012345678901"
-}
-
-### 4. Upload ảnh đại diện (multipart, field "file")
-POST {{baseUrl}}/api/me/photo
-Content-Type: multipart/form-data; boundary=boundary
-
---boundary
-Content-Disposition: form-data; name="file"; filename="avatar.png"
-Content-Type: image/png
-
-<noi dung file png>
---boundary--
-
-### 5. Danh sách yêu cầu đổi hồ sơ của mình
-GET {{baseUrl}}/api/me/profile-change-requests
-
-### 6. Danh sách yêu cầu chung (admin/staff), lọc theo trạng thái
-GET {{baseUrl}}/api/profile-change-requests?status=PENDING
-
-### 7. Duyệt yêu cầu (admin/staff)
-PATCH {{baseUrl}}/api/profile-change-requests/1
-Content-Type: application/json
-
-{ "action": "approve" }
-
-### 8. Từ chối yêu cầu
-PATCH {{baseUrl}}/api/profile-change-requests/1
-Content-Type: application/json
-
-{ "action": "reject" }
-
-### 9. action không hợp lệ -> 400
-PATCH {{baseUrl}}/api/profile-change-requests/1
-Content-Type: application/json
-
-{ "action": "delete" }
-
-### 10. Học viên duyệt yêu cầu -> 403
-PATCH {{baseUrl}}/api/profile-change-requests/1
-Content-Type: application/json
-
-{ "action": "approve" }
-
-### 11. Chưa đăng nhập -> 401
-GET {{baseUrl}}/api/me/profile
+### Học viên: Lấy buổi học theo khoảng thời gian
+GET {{baseUrl}}/api/me/lessons?from=2026-10-15&to=2026-11-15&page=1&pageSize=50
+Authorization: Bearer {{studentToken}}

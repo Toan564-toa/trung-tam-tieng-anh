@@ -1,0 +1,13 @@
+$kind: http-request
+name: 'P8-068 Teacher A xem lớp A (expect 2xx)'
+order: 1000
+url: '{{baseUrl}}/api/classes/{{classId}}'
+method: GET
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      // Đăng nhập bằng TEACHER A trước khi chạy
+      pm.test("P8-068: Teacher A xem lớp A (lớp mình) trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });

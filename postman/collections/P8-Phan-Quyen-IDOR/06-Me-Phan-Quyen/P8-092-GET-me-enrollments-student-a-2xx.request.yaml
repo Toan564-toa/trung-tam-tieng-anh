@@ -1,0 +1,27 @@
+$kind: http-request
+name: 'P8-092 Student A GET /me/enrollments (expect 2xx)'
+order: 3000
+url: '{{baseUrl}}/api/me/enrollments'
+method: GET
+queryParams:
+  - key: page
+    value: '1'
+  - key: pageSize
+    value: '20'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      // Đăng nhập bằng STUDENT A trước khi chạy
+      pm.test("P8-092: Student A GET /me/enrollments trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-092: Chỉ trả dữ liệu của Student A", function () {
+        const body = pm.response.json();
+        const items = (body.data && body.data.items) || body.items || [];
+        items.forEach(function(enrollment) {
+          if (enrollment.studentId) {
+            pm.expect(String(enrollment.studentId)).to.equal(String(pm.environment.get("studentAId")));
+          }
+        });
+      });

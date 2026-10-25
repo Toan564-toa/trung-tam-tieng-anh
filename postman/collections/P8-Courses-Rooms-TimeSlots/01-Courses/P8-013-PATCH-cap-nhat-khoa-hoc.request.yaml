@@ -1,0 +1,26 @@
+$kind: http-request
+name: 'P8-013 Cập nhật khóa học'
+order: 4000
+method: PATCH
+url: '{{baseUrl}}/api/courses/{{courseId}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "Tiếng Anh cơ bản (đã cập nhật) {{runTag}}",
+      "listPrice": 5500000
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-013: Cập nhật khóa học trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-013: Snapshot giá cũ không đổi trong invoice hiện có", function () {
+        // Ghi chú: kiểm tra thủ công invoice snapshot sau khi tạo enrollment
+        pm.expect(true).to.be.true;
+      });

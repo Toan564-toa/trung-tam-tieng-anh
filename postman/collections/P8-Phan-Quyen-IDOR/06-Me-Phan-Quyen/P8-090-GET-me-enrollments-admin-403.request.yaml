@@ -1,0 +1,13 @@
+$kind: http-request
+name: 'P8-090 Admin GET /me/enrollments (expect 403)'
+order: 1000
+url: '{{baseUrl}}/api/me/enrollments'
+method: GET
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      // Đăng nhập bằng ADMIN trước khi chạy
+      pm.test("P8-090: Admin GET /me/enrollments trả 403 (chỉ dành cho student)", function () {
+        pm.expect(pm.response.code).to.equal(403);
+      });

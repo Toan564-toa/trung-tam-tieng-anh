@@ -1,0 +1,13 @@
+$kind: http-request
+name: 'P8-065 GET rooms chưa đăng nhập (expect 401)'
+order: 3000
+url: '{{baseUrl}}/api/rooms'
+method: GET
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      // KHÔNG đăng nhập
+      pm.test("P8-065: Chưa đăng nhập GET /rooms trả 401", function () {
+        pm.expect(pm.response.code).to.equal(401);
+      });

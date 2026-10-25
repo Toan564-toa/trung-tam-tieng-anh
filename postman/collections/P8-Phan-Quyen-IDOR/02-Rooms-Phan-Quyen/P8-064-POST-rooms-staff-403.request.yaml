@@ -1,0 +1,24 @@
+$kind: http-request
+name: 'P8-064 POST rooms bằng staff (expect 403)'
+order: 2000
+url: '{{baseUrl}}/api/rooms'
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "Phòng Staff Test",
+      "capacity": 10,
+      "status": "AVAILABLE"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      // Đăng nhập bằng STAFF trước khi chạy
+      pm.test("P8-064: Staff POST /rooms trả 403", function () {
+        pm.expect(pm.response.code).to.equal(403);
+      });

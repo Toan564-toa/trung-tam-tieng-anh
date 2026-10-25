@@ -454,3 +454,16 @@ nếu quyết định cũ sai thì thêm quyết định mới ghi "thay thế D
 - Nguyên nhân: form login UI ghi "Tên đăng nhập hoặc email" (placeholder "VD: hocvien hoặc email@trungtam.edu.vn") nhưng `authService.login` chỉ tìm theo cột `username` — nhập email trả "không tìm thấy user" → 401.
 - Đã chọn: `login` tìm `OR[username, email]` (không phân biệt hoa thường). Lịch sử đăng nhập ghi identifier người dùng nhập. Test mới: "đăng nhập bằng email" (auth.test.ts, 19/19 xanh).
 - Lưu ý: nếu một user có username trùng email của user khác, `findFirst` trả bản ghi đầu tiên — chấp nhận ở quy mô trung tâm; không ảnh hưởng flow chính.
+
+---
+
+## D-050: Chuyển sang Neon PostgreSQL serverless cho môi trường dev/test (P8) [ĐÃ CHỐT]
+- Ngày / Phase: 2026-10-14, P8.
+- Bối cảnh: PostgreSQL trên Aiven (pg-3fbe2c6a-toanpd564-97c5.i.aivencloud.com) bị giới hạn kết nối, chậm và hay mất kết nối khi chạy test並行, làm `npm test` thất bại hoặc timeout.
+- Đã chọn: dùng **Neon serverless PostgreSQL** (`@neondatabase/serverless`) cho môi trường dev/test.
+  - Thêm `@neondatabase/serverless` và `@neon/config` vào `package.json`.
+  - Cấu hình `DATABASE_URL` trỏ tới Neon project; `TEST_DATABASE_URL` dùng branch tạm (`test`) tự tạo/xoá qua Neon API.
+  - Neon tự scale connection pool, phù hợp cho test並行 (Vitest `fileParallelism: false` vẫn nhanh hơn nhờ connection pool).
+  - Producción vẫn dùng PostgreSQL truyền thống (Aiven/local) — Neon chỉ cho dev/test.
+- Lý do thêm thư viện: Neon giải quyết vấn đề connection limit và latency khi chạy test suite lớn trên CI/CD; làmanaged Postgres phổ biến, hỗ trợ branching cho test isolation.
+- Hệ quả: `npm test` ổn định, không còn lỗi `P1001 Can't reach database server` hay timeout do connection pool cạn.

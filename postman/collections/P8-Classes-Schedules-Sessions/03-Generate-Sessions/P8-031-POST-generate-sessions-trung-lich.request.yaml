@@ -1,0 +1,33 @@
+$kind: http-request
+name: P8-031 Generate sessions trùng lịch (expect conflict)
+order: 3000
+url: "{{baseUrl}}/api/classes/{{classId}}/generate-sessions"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "startDate": "2026-11-02",
+      "weekdays": [2],
+      "timeSlotId": 8,
+      "roomId": 3,
+      "skipHolidays": []
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("P8-031: Generate trùng lịch trả 409 Conflict", function () {
+        pm.expect(pm.response.code).to.equal(409);
+      });
+      pm.test("P8-031: Error code là SCHEDULE_CONFLICT", function () {
+        const body = pm.response.json();
+        pm.expect(body.error).to.exist;
+        pm.expect(body.error.code).to.equal('SCHEDULE_CONFLICT');
+      });
+      pm.test("P8-031: Không có session dở dang bị tạo", function () {
+        // Conflict phải trả 4xx, không phải 500 (không để partial state)
+        pm.expect(pm.response.code).not.to.equal(500);
+        pm.expect(pm.response.code).not.to.equal(200);
+      });

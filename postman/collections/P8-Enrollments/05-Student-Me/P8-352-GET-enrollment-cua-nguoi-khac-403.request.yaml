@@ -1,0 +1,20 @@
+$kind: http-request
+name: 'P8-352 Student xem enrollment người khác (expect 403/404)'
+order: 3000
+url: '{{baseUrl}}/api/enrollments/{{enrollmentAId}}'
+method: GET
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-352: Student B xem enrollment của Student A bị chặn", function () {
+        // Đăng nhập bằng student B trước khi chạy
+        // enrollmentAId là enrollment của student A
+        pm.expect(pm.response.code).to.be.oneOf([403, 404]);
+      });
+      pm.test("P8-352: Không trả dữ liệu của người khác (IDOR check)", function () {
+        if (pm.response.code === 200) {
+          pm.expect.fail("IDOR VULNERABILITY: Student B có thể đọc enrollment của Student A!");
+        }
+        pm.expect(pm.response.code).to.be.oneOf([403, 404]);
+      });

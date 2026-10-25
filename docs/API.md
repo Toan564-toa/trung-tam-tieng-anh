@@ -45,25 +45,21 @@
 | 10 | `GET /api/students/:id` | student(đúng người), staff, admin | Hồ sơ học viên | students | **đã có (P2, staff+admin)** |
 | 11 | `GET/POST /api/teachers` | admin | Quản lý giáo viên | teachers | **đã có (P5)** |
 | 12 | `GET/POST /api/staff` | admin | Quản lý nhân viên | staff | **đã có (P5)** |
-| 13 | `GET/POST /api/courses` | admin | Khóa học | courses | chưa có |
-| 14 | `GET/POST /api/classes` | staff, admin | Lớp học | classes | chưa có |
-| 15 | `GET/POST /api/rooms` | admin | Phòng học | rooms | chưa có |
-| 16 | `GET/POST /api/timetable` | staff, admin | Thời khóa biểu (kiểm tra trùng phòng/GV) | timetable | chưa có |
-| 17 | `GET/POST /api/class-sessions` | teacher, admin | Buổi học, điểm danh | sessions | chưa có |
-| 18 | `POST /api/attendances` | teacher, admin | Điểm danh | sessions | **đã có (P2, khác path — xem 1c)** |
-| 19 | `GET/POST /api/invoices` | staff, admin | Khoản phải thu, công nợ | tuition | chưa có |
-| 20 | `POST /api/payments` | staff, admin | Thu học phí | tuition | chưa có |
-| 21 | `POST /api/receipts/close-of-day` | staff, admin | Đối soát cuối ngày | tuition | chưa có |
-| 22 | `POST /api/discount-requests/:id/approve` | admin | Duyệt giảm giá/hoàn phí | tuition | chưa có |
-| 23 | `GET/POST /api/pay-rolls` | admin | Bảng lương + chốt lương | payroll | chưa có |
-| 24 | `GET/POST /api/events` | staff, admin | Lịch trình | events | chưa có |
-| 25 | `GET/POST /api/tests`, `/api/scores` | teacher, admin | Nhập điểm | grades | chưa có |
-| 26 | `GET/POST /api/assignments` | teacher, admin | Giao bài tập | assignments | chưa có |
-| 27 | `GET/POST /api/posts` | staff, admin | Nội dung website | content | chưa có |
-| 28 | `GET/POST /api/leads` | staff | Khách tiềm năng | leads | **đã có (P2, xem 1c)** |
-| 29 | `GET /api/dashboard`, `/api/reports/*` | admin | Dashboard, báo cáo | reports | chưa có |
-| 30 | `GET /api/audit-logs` | admin | Nhật ký thao tác | audit | chưa có |
-| 31 | `GET/PATCH /api/settings` | admin | Cài đặt | settings | chưa có |
+| 13 | `GET/POST /api/courses` | admin | Khóa học | courses | **đã có (P8)** |
+| 14 | `GET/POST /api/classes` | staff, admin | Lớp học | classes | **đã có (P8)** |
+| 15 | `GET/POST /api/rooms` | admin | Phòng học | rooms | **đã có (P8)** |
+| 16 | `GET /api/timetable` | staff, admin, teacher | Thời khóa biểu | timetable | **đã có (P8)** |
+| 17 | `GET/POST/PATCH /api/classes/:id/sessions` | teacher, admin | Buổi học | class-sessions | **đã có (P8)** |
+| 18 | `POST /api/classes/:id/generate-sessions` | admin, staff | Sinh buổi học 64 buổi | classes | **đã có (P8)** |
+| 19 | `GET/POST /api/enrollments` | staff, admin | Ghi danh | enrollments | **đã có (P8)** |
+| 20 | `POST /api/enrollments/:id/transfer` | staff, admin | Chuyển lớp | enrollments | **đã có (P8)** |
+| 21 | `POST /api/enrollments/:id/freeze` | staff, admin | Bảo lưu ghi danh | enrollments | **đã có (P8)** |
+| 22 | `POST /api/enrollments/:id/unfreeze` | staff, admin | Kết thúc bảo lưu | enrollments | **đã có (P8)** |
+| 23 | `POST /api/enrollments/:id/makeup` | staff, admin | Tạo buổi học bù | enrollments | **đã có (P8)** |
+| 24 | `GET /api/classes/teacher/classes` | teacher | Lớp của giáo viên | classes | **đã có (P8)** |
+| 25 | `GET /api/classes/teacher/classes/:id/students` | teacher | Học viên lớp mình | classes | **đã có (P8)** |
+| 26 | `GET /api/me/enrollments` | student | Ghi danh của mình | student-self | **đã có (P8)** |
+| 27 | `GET /api/me/lessons` | student | 64 buổi học + điểm danh | student-self | **đã có (P8)** |
 
 ## 1b. Nhóm bổ sung sinh ra ở P1 (xem FRONTEND-CONTRACT.md phần C để có đầy đủ tham số)
 
@@ -73,29 +69,25 @@
 | 32 | `PATCH /api/users/:id/status`, `POST /api/users/:id/reset-password`, `PATCH /api/users/:id/restore` | admin | Tài khoản & phân quyền | users |
 | 33 | `GET /api/users/export` | admin | Xuất Excel tài khoản | users |
 | 34 | `GET /api/imports/templates/:type`, `POST /api/imports`, `GET /api/imports/:id`, `POST /api/imports/:id/confirm`, `POST /api/imports/:id/credentials` | admin | Nhập Excel | imports | **đã có (P6)** |
-| 35 | `GET /api/me`, `PATCH /api/me` | mọi vai trò | Thông tin cá nhân (3 khu vực) | profile |
-| 36 | `GET /api/me/summary`, `/api/me/progress`, `/api/me/lessons`, `/api/me/attendance`, `/api/me/attendance-summary`, `/api/me/scores`, `/api/me/scores/summary`, `/api/me/assignments`, `/api/me/tuition`, `/api/me/payments`, `/api/me/calendar`, `/api/me/announcements` | học viên | 7 màn khu học viên | student-self |
-| 37 | `GET /api/me/classes`, `/api/me/students`, `/api/me/schedule`, `/api/me/assessments`, `/api/me/payroll`, `/api/me/overview` | giáo viên | 11 màn khu giáo viên | teacher-self |
-| 38 | `GET /api/me/students?tuition=`, `/api/me/leads`, `/api/me/leads/conversion`, `/api/me/payments/summary`, `/api/me/timetable`, `/api/me/events`, `/api/me/posts`, `/api/me/payroll`, `/api/me/tasks` | nhân viên | 10 màn khu nhân viên | staff-self |
-| 39 | `GET /api/students/:id/notes`, `POST /api/students/:id/notes` | staff, admin | Ghi chú chăm sóc | students |
-| 40 | `POST /api/students`, `PATCH /api/students/:id` | staff, admin | Ghi danh, hồ sơ học viên | students |
-| 41 | `POST /api/enrollments`, `GET /api/classes/:id/students` | staff, admin | Ghi danh vào lớp | enrollments |
-| 42 | `GET /api/classes/today` | staff, admin | Lịch trình, dashboard | classes |
-| 43 | `GET/PUT /api/classes/:classId/sessions/:sessionId/attendance`, `PATCH /api/classes/:classId/sessions/:sessionId` | teacher, admin | Điểm danh | sessions |
-| 44 | `POST /api/classes/:classId/attendance/unlock` | **admin** | Mở khoá điểm danh | sessions |
-| 45 | `GET /api/attendance/today` | staff, admin | Điểm danh hôm nay | sessions |
-| 46 | `POST /api/classes/:classId/schedules`, `PATCH/DELETE /api/class-schedules/:id`, `POST /api/timetable/check` | admin | Thời khóa biểu | timetable |
-| 47 | `POST /api/assessments`, `GET/PUT /api/assessments/:id/scores` | teacher, admin | Nhập điểm | grades |
-| 48 | `GET /api/me/payroll/:id/pdf`, `GET /api/payroll/:id/pdf` | giáo viên, nhân viên, admin | Phiếu lương | payroll |
-| 49 | `POST /api/payroll/periods`, `POST /api/payroll/items`, `POST /api/payroll/periods/:id/approve`, `POST /api/payroll/periods/:id/lock` | admin | Bảng lương admin | payroll |
-| 50 | `GET /api/payments/:id/receipt` | student(đúng người), staff, admin | Phiếu thu | tuition |
-| 51 | `POST /api/cash-closings`, `POST /api/cash-closings/:id/close` | staff, admin | Đối soát tiền mặt | tuition |
-| 52 | `POST /api/discounts/:id/approve`, `POST /api/refunds/:id/approve` | admin | Duyệt giảm giá / hoàn phí | tuition |
-| 53 | `POST /api/posts/:id/publish`, `POST /api/posts/:id/approve`, `POST /api/posts/:id/unpublish` | staff, admin | Bài đăng | content |
-| 54 | `PATCH /api/teachers/:id/website-visibility`, `GET/POST/PATCH /api/banners` | admin | Nội dung website | content |
-| 55 | `POST /api/leads/:id/activities`, `PATCH /api/leads/:id/stage`, `POST /api/leads/:id/convert` | staff, admin | Khách tiềm năng | leads |
-| 56 | `GET /api/reports/{revenue,enrollment,class-size,lead-source,funnel,debt-total,debt-aging,attendance}`, `GET /api/reports/export` | admin | Báo cáo | reports |
-| 57 | `GET /api/notifications` | mọi vai trò | Chuông thông báo | notifications |
+| 35 | `GET /api/courses`, `POST /api/courses`, `GET /api/courses/:id`, `PATCH /api/courses/:id`, `PATCH /api/courses/:id/status`, `DELETE /api/courses/:id`, `GET /api/public/courses`, `GET /api/public/courses/:id` | admin, công khai | Khóa học, landing | courses | **đã có (P8)** |
+| 36 | `GET /api/rooms`, `POST /api/rooms`, `PATCH /api/rooms/:id`, `DELETE /api/rooms/:id` | admin | Phòng học | rooms | **đã có (P8)** |
+| 37 | `GET /api/time-slots`, `POST /api/time-slots`, `PATCH /api/time-slots/:id`, `DELETE /api/time-slots/:id` | admin, mọi vai trò (đọc) | Ca học | time-slots | **đã có (P8)** |
+| 38 | `GET /api/classes`, `POST /api/classes`, `GET /api/classes/:id`, `PATCH /api/classes/:id`, `PATCH /api/classes/:id/status`, `DELETE /api/classes/:id`, `PATCH /api/classes/:id/teacher` | admin, staff | Lớp học | classes | **đã có (P8)** |
+| 39 | `GET /api/classes/:id/sessions`, `POST /api/classes/:id/sessions`, `PATCH /api/classes/:id/sessions/:sessionId` | teacher, admin | Buổi học | classes | **đã có (P8)** |
+| 40 | `POST /api/classes/:id/generate-sessions` | admin, staff | Sinh 64 buổi từ thời khóa biểu | classes | **đã có (P8)** |
+| 41 | `GET /api/classes/today` | staff, admin | Buổi học hôm nay | classes | **đã có (P8)** |
+| 42 | `GET /api/classes/timetable` | staff, admin, teacher | Thời khóa biểu tổng hợp | classes | **đã có (P8)** |
+| 43 | `GET /api/classes/teacher/classes` | teacher | Lớp của mình | classes | **đã có (P8)** |
+| 44 | `GET /api/classes/teacher/classes/:id/students` | teacher | Học viên lớp mình | classes | **đã có (P8)** |
+| 45 | `GET /api/classes/:id/schedules`, `POST /api/classes/:id/schedules`, `PATCH /api/schedules/:id`, `DELETE /api/schedules/:id`, `GET /api/classes/conflicts` | admin | Lịch lặp hằng tuần | classes | **đã có (P8)** |
+| 46 | `GET /api/enrollments`, `POST /api/enrollments`, `GET /api/enrollments/:id`, `PATCH /api/enrollments/:id`, `PATCH /api/enrollments/:id/status` | staff, admin | Ghi danh | enrollments | **đã có (P8)** |
+| 47 | `POST /api/enrollments/:id/transfer` | staff, admin | Chuyển lớp | enrollments | **đã có (P8)** |
+| 48 | `POST /api/enrollments/:id/freeze` | staff, admin | Bảo lưu ghi danh | enrollments | **đã có (P8)** |
+| 49 | `POST /api/enrollments/:id/unfreeze` | staff, admin | Kết thúc bảo lưu | enrollments | **đã có (P8)** |
+| 50 | `POST /api/enrollments/:id/makeup` | staff, admin | Tạo buổi học bù | enrollments | **đã có (P8)** |
+| 51 | `GET /api/me/enrollments` | student | Ghi danh của mình | student-self | **đã có (P8)** |
+| 52 | `GET /api/me/lessons` | student | 64 buổi học + điểm danh | student-self | **đã có (P8)** |
+| 53 | `GET /api/me`, `PATCH /api/me` | mọi vai trò | Thông tin cá nhân (3 khu vực) | profile |
 
 ## 1c. Endpoint đã hiện thực ở P2/P4 (xác minh bằng test)
 

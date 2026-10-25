@@ -1,0 +1,13 @@
+$kind: http-request
+name: 'P8-243 Xóa ca học đang dùng (expect 409)'
+order: 4000
+method: DELETE
+url: '{{baseUrl}}/api/time-slots/{{timeSlotId}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-243: Xóa ca học đang dùng trả 409 hoặc 400", function () {
+        // Chạy sau khi timeSlot đã được gán cho lớp
+        pm.expect(pm.response.code).to.be.oneOf([409, 400]);
+      });

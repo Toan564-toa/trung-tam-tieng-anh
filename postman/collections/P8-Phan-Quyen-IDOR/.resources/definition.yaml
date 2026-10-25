@@ -1,0 +1,3 @@
+$kind: collection
+name: 'P8 - Phân quyền & IDOR'
+description: 'Kiểm thử Phase 8: Ma trận quyền theo vai trò và kiểm tra IDOR (mục 4 test plan)'

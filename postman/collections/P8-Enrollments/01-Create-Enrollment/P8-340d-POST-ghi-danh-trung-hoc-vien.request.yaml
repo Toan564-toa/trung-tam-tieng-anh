@@ -1,0 +1,24 @@
+$kind: http-request
+name: 'P8-340d Ghi danh trùng học viên (expect 409)'
+order: 4000
+url: '{{baseUrl}}/api/enrollments'
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "studentId": "{{studentAId}}",
+      "classId": "{{classId}}",
+      "startDate": "2026-11-02",
+      "note": "Ghi danh lại cùng học viên {{runTag}}"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-340d: Ghi danh trùng trả 409 (BR-02)", function () {
+        pm.expect(pm.response.code).to.equal(409);
+      });

@@ -1,0 +1,25 @@
+$kind: http-request
+name: P8-350 Student xem enrollments của mình
+order: 1000
+url: "{{baseUrl}}/api/me/enrollments?page=1&pageSize=20"
+method: GET
+queryParams:
+  page: "1"
+  pageSize: "20"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("P8-350: Student xem enrollments trả 2xx", function () {
+        // Đăng nhập bằng student A trước khi chạy
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-350: Chỉ trả dữ liệu của student đang đăng nhập", function () {
+        const body = pm.response.json();
+        const items = (body.data && body.data.items) || body.items || [];
+        items.forEach(function(enrollment) {
+          if (enrollment.studentId) {
+            pm.expect(String(enrollment.studentId)).to.equal(String(pm.environment.get("studentAId")));
+          }
+        });
+      });
+    language: text/javascript

@@ -1,0 +1,20 @@
+$kind: http-request
+name: 'P8-015 Public courses (không auth)'
+order: 6000
+method: GET
+url: '{{baseUrl}}/api/public/courses'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-015: Public courses trả 2xx không cần auth", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-015: Chỉ trả khóa học PUBLISHED và isPublic=true", function () {
+        const body = pm.response.json();
+        const items = (body.data && body.data.items) || body.items || [];
+        items.forEach(function(course) {
+          pm.expect(course.status).to.equal("PUBLISHED");
+          pm.expect(course.isPublic).to.equal(true);
+        });
+      });

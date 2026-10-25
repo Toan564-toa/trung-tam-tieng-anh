@@ -1,0 +1,21 @@
+$kind: http-request
+name: 'P8-014 Đổi trạng thái khóa học'
+order: 5000
+method: PATCH
+url: '{{baseUrl}}/api/courses/{{courseId}}/status'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "status": "PUBLISHED"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-014: Đổi trạng thái trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });

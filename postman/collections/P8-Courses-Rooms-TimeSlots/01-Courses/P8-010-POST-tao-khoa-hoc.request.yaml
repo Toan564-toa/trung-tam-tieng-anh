@@ -1,0 +1,52 @@
+$kind: http-request
+name: 'P8-010 Tạo khóa học hợp lệ'
+order: 1000
+method: POST
+url: '{{baseUrl}}/api/courses'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "code": "{{runTag}}-ENG001",
+      "slug": "{{runTag}}-english-beginner",
+      "name": "Tiếng Anh cơ bản {{runTag}}",
+      "level": "BEGINNER",
+      "language": "English",
+      "description": "Khóa học test P8",
+      "totalSessions": 64,
+      "sessionsPerWeek": 2,
+      "durationMonths": 8,
+      "listPrice": 5000000,
+      "isPublic": true,
+      "status": "PUBLISHED"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-010: Tạo khóa học trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-010: Lưu courseId vào environment", function () {
+        const body = pm.response.json();
+        const id = (body.data && body.data.id) || body.id;
+        pm.expect(id).to.exist;
+        pm.environment.set("courseId", id);
+      });
+      pm.test("P8-010: Không trả trường nhạy cảm", function () {
+        const body = pm.response.json();
+        const forbidden = /passwordhash|password|accesstoken|refreshtoken/i;
+        function inspect(value) {
+          if (Array.isArray(value)) return value.forEach(inspect);
+          if (value && typeof value === "object") {
+            Object.entries(value).forEach(([key, child]) => {
+              pm.expect(key, "Trường nhạy cảm: " + key).not.to.match(forbidden);
+              inspect(child);
+            });
+          }
+        }
+        inspect(body);
+      });

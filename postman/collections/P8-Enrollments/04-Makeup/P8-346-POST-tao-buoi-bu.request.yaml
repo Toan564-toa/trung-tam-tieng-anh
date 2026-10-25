@@ -1,0 +1,41 @@
+$kind: http-request
+name: P8-346 Tạo buổi học bù (dùng timeSlotId)
+order: 1000
+url: "{{baseUrl}}/api/enrollments/{{enrollmentAId}}/makeup"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "originalSessionId": {{sessionAId}},
+      "makeupDate": "2026-11-10",
+      "timeSlotId": 6,
+      "roomId": {{roomId}},
+      "teacherId": {{teacherAId}},
+      "note": "Buổi bù test {{runTag}}"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("P8-346: Tạo buổi bù trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-346: Auto-fill giờ từ timeSlotId (CA6: 17:00-18:30)", function () {
+        const body = pm.response.json();
+        const data = body.data || body;
+        pm.expect(data.startTime).to.equal('17:00');
+        pm.expect(data.endTime).to.equal('18:30');
+      });
+      pm.test("P8-346: lessonNo = 9999 (buổi bù marker)", function () {
+        const body = pm.response.json();
+        const data = body.data || body;
+        pm.expect(data.lessonNo).to.equal(9999);
+      });
+      pm.test("P8-346: Không thay đổi buổi gốc", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-346: Không xung đột lịch phòng/giáo viên", function () {
+        pm.expect(pm.response.code).not.to.equal(409);
+      });

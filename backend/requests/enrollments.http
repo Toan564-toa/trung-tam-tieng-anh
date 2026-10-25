@@ -1,0 +1,88 @@
+### Lấy danh sách ghi danh (admin, staff)
+GET {{baseUrl}}/api/enrollments?page=1&pageSize=20&status=ACTIVE
+Authorization: Bearer {{adminToken}}
+
+### Lấy chi tiết ghi danh (admin, staff, teacher, student)
+GET {{baseUrl}}/api/enrollments/1
+Authorization: Bearer {{adminToken}}
+
+### Tạo ghi danh mới (admin, staff)
+POST {{baseUrl}}/api/enrollments
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "studentId": 1,
+  "classId": 1,
+  "startDate": "2026-10-15",
+  "expectedEndDate": "2027-06-15",
+  "tuitionAmount": 5000000,
+  "discountAmount": 500000,
+  "note": "Ghi danh ưu đãi sớm"
+}
+
+### Cập nhật ghi danh (admin, staff)
+PATCH {{baseUrl}}/api/enrollments/1
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "tuitionAmount": 5500000,
+  "discountAmount": 1000000
+}
+
+### Đổi trạng thái ghi danh (admin, staff)
+PATCH {{baseUrl}}/api/enrollments/1/status
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "status": "FROZEN"
+}
+
+### Chuyển lớp (admin, staff)
+POST {{baseUrl}}/api/enrollments/1/transfer
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "newClassId": 2,
+  "transferDate": "2026-11-01",
+  "reason": "Chuyển sang lớp phù hợp hơn với trình độ"
+}
+
+### Bảo lưu ghi danh (admin, staff)
+POST {{baseUrl}}/api/enrollments/1/freeze
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "fromDate": "2026-11-01",
+  "expectedToDate": "2026-12-31",
+  "reason": "Học viên đi du lịch lâu dài"
+}
+
+### Kết thúc bảo lưu (admin, staff)
+POST {{baseUrl}}/api/enrollments/1/unfreeze
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "toDate": "2026-12-15",
+  "reason": "Học viên quay lại sớm hơn dự kiến"
+}
+
+### Tạo buổi học bù (admin, staff)
+POST {{baseUrl}}/api/enrollments/1/makeup
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "originalSessionId": 5,
+  "makeupDate": "2026-11-10",
+  "startTime": "17:30",
+  "endTime": "19:00",
+  "roomId": 1,
+  "teacherId": 1,
+  "note": "Buổi bù cho buổi 5 bị hủy do thời tiết"
+}

@@ -1,0 +1,31 @@
+### Lấy danh sách phòng học (admin)
+GET {{baseUrl}}/api/rooms?page=1&pageSize=20&status=AVAILABLE
+Authorization: Bearer {{adminToken}}
+
+### Tạo phòng học (admin)
+POST {{baseUrl}}/api/rooms
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "branchId": 1,
+  "name": "Phòng 101",
+  "capacity": 30,
+  "floor": 1,
+  "equipment": ["Máy chiếu", "Bảng trắng", "Điều hòa"],
+  "status": "AVAILABLE"
+}
+
+### Cập nhật phòng học (admin)
+PATCH {{baseUrl}}/api/rooms/1
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "capacity": 35,
+  "equipment": ["Máy chiếu", "Bảng trắng", "Điều hòa", "Loa"]
+}
+
+### Xóa mềm phòng học (admin)
+DELETE {{baseUrl}}/api/rooms/1
+Authorization: Bearer {{adminToken}}

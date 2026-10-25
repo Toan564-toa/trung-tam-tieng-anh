@@ -1,0 +1,54 @@
+name: P8 Local
+values:
+  - key: baseUrl
+    value: 'http://localhost:4000'
+  - key: runTag
+    value: P8-POSTMAN-20261018-01
+  - key: adminUsername
+    value: admin
+  - key: adminPassword
+    value: '#Admin1234'
+  - key: staffUsername
+    value: nv001@gmail.com
+  - key: staffPassword
+    value: '#Nhanvien1234'
+  - key: teacherAUsername
+    value: gv001@gmail.com
+  - key: teacherAPassword
+    value: '#Giaovien1234'
+  - key: teacherBUsername
+    value: qt001@gmail.com
+  - key: teacherBPassword
+    value: '#Quantri1234'
+  - key: studentAUsername
+    value: hv001@gmail.com
+  - key: studentAPassword
+    value: '#Hocvien1234'
+  - key: studentBUsername
+    value: hv002@gmail.com
+  - key: studentBPassword
+    value: '#Hocvien5678'
+  - key: courseId
+    value: ''
+  - key: roomId
+    value: ''
+  - key: timeSlotId
+    value: ''
+  - key: classId
+    value: '14'
+  - key: classBId
+    value: ''
+  - key: studentAId
+    value: ''
+  - key: studentBId
+    value: ''
+  - key: teacherAId
+    value: ''
+  - key: teacherBId
+    value: ''
+  - key: enrollmentAId
+    value: ''
+  - key: sessionAId
+    value: ''
+  - key: scheduleAId
+    value: '20'

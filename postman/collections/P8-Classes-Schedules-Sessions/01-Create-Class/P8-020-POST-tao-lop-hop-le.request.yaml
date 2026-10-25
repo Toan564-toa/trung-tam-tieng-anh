@@ -1,0 +1,48 @@
+$kind: http-request
+name: P8-020 Tạo lớp học hợp lệ (admin)
+order: 1000
+url: "{{baseUrl}}/api/classes"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "courseId": {{courseId}},
+      "classCode": "{{runTag}}-A",
+      "name": "{{runTag}} Lop A",
+      "teacherId": {{teacherAId}},
+      "roomId": {{roomId}},
+      "startDate": "2026-11-02",
+      "expectedEndDate": "2027-07-02",
+      "maxStudents": 2,
+      "status": "PLANNED",
+      "schedules": [
+        { "weekday": 1, "timeSlotId": {{timeSlotId}}, "roomId": {{roomId}} },
+        { "weekday": 3, "timeSlotId": {{timeSlotId}}, "roomId": {{roomId}} }
+      ]
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("P8-020: Tạo lớp trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-020: Lưu classId và scheduleAId vào environment", function () {
+        const body = pm.response.json();
+        const data = body.data || body;
+        pm.expect(data.id).to.exist;
+        pm.environment.set("classId", data.id);
+        if (data.schedules && data.schedules.length > 0) {
+          pm.environment.set("scheduleAId", data.schedules[0].id);
+        }
+      });
+      pm.test("P8-020: DTO lớp khớp hợp đồng", function () {
+        const body = pm.response.json();
+        const data = body.data || body;
+        pm.expect(data).to.have.property("id");
+        pm.expect(data).to.have.property("classCode");
+        pm.expect(data).to.have.property("status");
+      });
+    language: text/javascript

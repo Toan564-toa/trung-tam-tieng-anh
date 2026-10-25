@@ -1,0 +1,23 @@
+$kind: http-request
+name: 'P8-007: POST /api/auth/login (student A)'
+order: 3000
+method: POST
+url: '{{baseUrl}}/api/auth/login'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "username": "{{studentAUsername}}",
+      "password": "{{studentAPassword}}",
+      "portal": "client"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-007: Login student A trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });

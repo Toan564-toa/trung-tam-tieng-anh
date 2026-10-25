@@ -1,0 +1,22 @@
+$kind: http-request
+name: 'P8-351 Student xem 64 buổi học của mình'
+order: 2000
+url: '{{baseUrl}}/api/me/lessons?page=1&pageSize=100'
+method: GET
+queryParams:
+  - key: page
+    value: '1'
+  - key: pageSize
+    value: '100'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-351: Student xem lessons trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-351: Chỉ trả buổi học của lớp student đang học", function () {
+        const body = pm.response.json();
+        const data = body.data || body;
+        pm.expect(data).to.have.property("items");
+      });

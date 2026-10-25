@@ -12,6 +12,10 @@ meRoutes.patch('/profile', controller.updateProfile);
 meRoutes.post('/photo', uploadSingle('file'), controller.updateAvatar);
 meRoutes.get('/profile-change-requests', controller.listMyChangeRequests);
 
+// Phase 8: Học viên - Ghi danh và lịch học
+meRoutes.get('/enrollments', requireRole('student'), controller.listMyEnrollments);
+meRoutes.get('/lessons', requireRole('student'), controller.listMyLessons);
+
 // Duyệt yêu cầu đổi hồ sơ: nhân viên và admin.
 export const profileChangeRoutes = Router();
 profileChangeRoutes.use(authenticate, requireRole('admin', 'staff'));

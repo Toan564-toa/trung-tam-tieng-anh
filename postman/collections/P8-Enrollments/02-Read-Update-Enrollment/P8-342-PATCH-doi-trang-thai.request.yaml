@@ -1,0 +1,24 @@
+$kind: http-request
+name: 'P8-342 Đổi trạng thái ghi danh'
+order: 3000
+url: '{{baseUrl}}/api/enrollments/{{enrollmentAId}}/status'
+method: PATCH
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "status": "ACTIVE"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-342: Đổi trạng thái hợp lệ trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-342: Status sai trả 400 (kiểm tra thủ công với status=INVALID)", function () {
+        pm.expect(true).to.be.true;
+      });

@@ -1,0 +1,25 @@
+$kind: http-request
+name: 'P8-231 Danh sách phòng học'
+order: 2000
+method: GET
+url: '{{baseUrl}}/api/rooms?page=1&pageSize=20&status=AVAILABLE'
+queryParams:
+  - key: page
+    value: '1'
+  - key: pageSize
+    value: '20'
+  - key: status
+    value: AVAILABLE
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-231: Danh sách phòng trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-231: Response có pagination envelope", function () {
+        const body = pm.response.json();
+        const data = body.data || body;
+        pm.expect(data).to.have.property("items");
+        pm.expect(data).to.have.property("total");
+      });

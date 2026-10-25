@@ -1,0 +1,12 @@
+$kind: http-request
+name: 'P8-233 Xóa mềm phòng học'
+order: 4000
+method: DELETE
+url: '{{baseUrl}}/api/rooms/{{roomId}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-233: Xóa phòng trả 2xx hoặc 204", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 204]);
+      });

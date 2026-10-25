@@ -1,0 +1,13 @@
+$kind: http-request
+name: 'P8-070 Student xem classes (expect 403)'
+order: 3000
+url: '{{baseUrl}}/api/classes/{{classId}}'
+method: GET
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      // Đăng nhập bằng STUDENT A trước khi chạy
+      pm.test("P8-070: Student GET /classes/:id trả 403", function () {
+        pm.expect(pm.response.code).to.equal(403);
+      });

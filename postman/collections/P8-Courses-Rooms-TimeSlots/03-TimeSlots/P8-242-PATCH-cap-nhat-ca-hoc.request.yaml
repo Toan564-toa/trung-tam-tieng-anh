@@ -1,0 +1,21 @@
+$kind: http-request
+name: 'P8-242 Cập nhật ca học'
+order: 3000
+method: PATCH
+url: '{{baseUrl}}/api/time-slots/{{timeSlotId}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "label": "Ca chiều (đã cập nhật) {{runTag}}"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-242: Cập nhật ca học trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });

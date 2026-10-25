@@ -2,13 +2,15 @@
 
 ## Trạng thái hiện tại
 - Phase đã hoàn thành: **P4** (2026-10-07) · **P5** (2026-10-09, sửa rà soát 2026-10-10) · **P6 — Import Excel (BE)** (2026-10-12) · **P7 — NỐI #1** (2026-10-13)
-- Phase hiện tại: **P8 — Khóa học, lớp, buổi học, ghi danh (BE)**
+- Phase hiện tại: **P8 — Khóa học, lớp, buổi học, ghi danh (BE)** — **đang thực hiện**
 - Lệnh chạy dự án: `npm run dev:fe` (frontend) · `npm run dev:be` (backend, `http://localhost:4000`)
-- Cập nhật lần cuối: 2026-10-13, phiên 11 (hỗ trợ auth: xác minh lỗi hết phiên và khôi phục tài khoản admin)
+- Cập nhật lần cuối: 2026-10-14, phiên P8 (khóa học, phòng, ca học, lớp, sinh buổi học 64 buổi, ghi danh)
 - Chi tiết P3: `docs/DECISIONS.md` D-022…D-024, `docs/DB.md`
 - Chi tiết P4: `docs/DECISIONS.md` D-025…D-029, `docs/API.md` phần Auth và tài khoản
 - Chi tiết P5: `docs/DECISIONS.md` D-030…D-038, `docs/API.md` phần hồ sơ, tệp, giáo viên, nhân viên
 - Chi tiết P6: `docs/DECISIONS.md` D-039…D-040, `docs/API.md` phần nhập Excel
+- Chi tiết P7: `docs/DECISIONS.md` D-041…D-049
+- Chi tiết P8 (đang làm): courses, rooms, time-slots, classes, enrollments, me/enrollments, me/lessons
 
 ## Danh sách phase
 ### Chuẩn bị
@@ -57,6 +59,37 @@ Thứ tự này xuất ra từ ma trận quyền (`docs/PERMISSIONS.md`) và h�
 | 10 | `notifications, audit_logs, settings, sequences, files` + view báo cáo (P18) | Dashboard, báo cáo, cài đặt; `audit_logs` bắt buộc từ Mốc 1 |
 
 ## Nhật ký bàn giao (mới nhất ở trên)
+### Phiên 13: 2026-10-14 (P8 — Sửa lỗi smoke test quan trọng)
+- **Enrollment service** (line 121): Sửa truy vấn `deletedAt` không tồn tại trong model → bỏ điều kiện `deletedAt: null`.
+- **Courses route**: Thêm `staff` vào `requireRole` cho GET `/api/courses` và `/api/courses/:id` (staff được đọc khóa học).
+- **Classes teacher scope**: Sửa `scopePredicate` và `findClassOrThrow` dùng `teacher profile ID` (lookup từ `userId`) thay vì `caller.id` (user ID). Thêm helper async `getTeacherId()`.
+- **Generate sessions skip holidays**: `generateSessions` nhận tham số `skipHolidays: Set<string>` và bỏ qua ngày trong tập này khi sinh lịch. `generateSessionsForClass` chuyển `holidayDates` đúng.
+- **DECISIONS.md**: Thêm D-050 ghi nhận chuyển sang Neon PostgreSQL serverless cho dev/test.
+- Typecheck + Lint: **xanh**.
+- Còn cần: Viết test file cho modules P8 mới (`classes.test.ts`, `courses.test.ts`, `rooms.test.ts`, `time-slots.test.ts`, `enrollments.test.ts`), chạy `npm test` verify trên Neon.
+
+### Lệch hợp đồng / Yêu cầu UI cho Phase NỐI (P10 — NỐI #2) — **Ghi nhận 2026-10-20**
+> Backend đã cung cấp đủ data; frontend cần implement sau khi chuyển sang phase NỐI.
+- **Màn Admin → Tài khoản** (`/tai-khoan`):
+  1. Thêm cột/badge **"Tạm khóa"** hiển thị khi `tempLocked === true`, tooltip `lockedUntil` (countdown).
+  2. Thêm badge **"Đổi MK lần đầu"** khi `mustChangePassword === true`.
+  3. Thêm nút **"Mở khóa tạm"** (chỉ hiển thị khi `tempLocked === true`), gọi `POST /api/users/:id/unlock-temp`.
+  4. Dropdown filter trạng thái: thêm option **"Đang tạm khóa"** (`tempLocked=true`) và **"Không tạm khóa"** (`tempLocked=false`).
+- **API backend đã sẵn sàng**: `GET /api/users` trả `tempLocked`, `lockedUntil`, `failedLoginCount`, `mustChangePassword`; `POST /api/users/:id/unlock-temp` admin only.
+
+### Phiên 12: 2026-10-14 (P8 — Khóa học, lớp, buổi học, ghi danh BE; **đang thực hiện**)
+- **Courses**: CRUD admin (staff đọc), course_price_history, course_lessons (tùy chọn), public courses cho landing.
+- **Rooms**: CRUD admin.
+- **Time-slots**: CRUD admin, đọc cho mọi vai trò.
+- **Classes**: CRUD admin/staff, giáo viên chính, phòng mặc định, sĩ số tối đa, trạng thái; class_teachers lưu lịch sử đổi giáo viên; class_schedules lưu lịch lặp hằng tuần.
+- **Generate sessions**: `POST /api/classes/:id/generate-sessions` sinh đúng totalSessions (mặc định 64) buổi theo thứ trong tuần, bỏ qua ngày nghỉ, phát hiện trùng phòng/giáo viên, chạy lại chỉ thay buổi tương lai chưa điểm danh.
+- **Timetable**: `GET /api/classes/timetable` (phân quyền admin/staff/teacher).
+- **Enrollments**: Ghi danh (kiểm tra sĩ số an toàn race condition), chuyển lớp (đánh dấu cũ TRANSFERRED), bảo lưu (enrollment_freezes), học bù (makeup_sessions). Tự tạo invoice + chụp snapshot học phí.
+- **Teacher endpoints**: `GET /api/classes/teacher/classes`, `GET /api/classes/teacher/classes/:id/students` (chỉ lớp mình).
+- **Student endpoints**: `GET /api/me/enrollments`, `GET /api/me/lessons` (64 buổi kèm trạng thái điểm danh).
+- Typecheck + Lint: **xanh**. Cần chạy test và thêm test file cho các module mới.
+- Docs: cập nhật `docs/API.md`, thêm `backend/requests/{courses,rooms,time-slots,classes,enrollments,me}.http`.
+
 ### Phiên 11: 2026-10-13 (hỗ trợ auth sau P7)
 - Điều tra thông báo “Phiên đăng nhập đã hết hạn” khi đăng nhập vai trò không phải admin; đối chiếu source xác nhận các xử lý đã ghi ở D-047 (cấp phiên mới sau đổi/đặt lại mật khẩu) và D-048 (không refresh khi endpoint auth công khai trả 401) hiện có trong mã.
 - Theo xác nhận của người dùng, đặt lại thông tin đăng nhập tài khoản `admin` trên database backend đang cấu hình: kích hoạt tài khoản, đặt mật khẩu tạm ngẫu nhiên, bắt buộc đổi mật khẩu khi đăng nhập lần đầu; vô hiệu hoá phiên/token cũ và ghi audit. Không ghi mật khẩu vào tài liệu.

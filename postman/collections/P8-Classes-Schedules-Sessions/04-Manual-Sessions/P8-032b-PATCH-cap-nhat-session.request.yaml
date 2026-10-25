@@ -1,0 +1,29 @@
+$kind: http-request
+name: 'P8-032b Cập nhật session (dùng timeSlotId)'
+order: 2000
+url: '{{baseUrl}}/api/classes/{{classId}}/sessions/{{sessionAId}}'
+method: PATCH
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "timeSlotId": 7,
+      "topic": "Unit 1: Greetings (đã cập nhật - đổi sang CA7)",
+      "note": "Đã thêm bài tập về nhà {{runTag}}"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-032b: Cập nhật session trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-032b: Auto-fill giờ từ timeSlotId mới (CA7: 19:00-20:30)", function () {
+        const body = pm.response.json();
+        const data = body.data || body;
+        pm.expect(data.startTime).to.equal('19:00');
+        pm.expect(data.endTime).to.equal('20:30');
+      });

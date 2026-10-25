@@ -49,3 +49,19 @@ export async function reviewChangeRequest(req: Request, res: Response) {
   const input = reviewChangeSchema.parse(req.body);
   res.json({ data: await service.reviewChangeRequest(id, input, req.user!, req.ip) });
 }
+
+// Phase 8: Học viên - Danh sách ghi danh của mình (GET /api/me/enrollments)
+export async function listMyEnrollments(req: Request, res: Response) {
+  const page = parseInt(req.query.page as string) || 1;
+  const pageSize = parseInt(req.query.pageSize as string) || 20;
+  res.json({ data: await service.listMyEnrollments(req.user!, page, pageSize) });
+}
+
+// Phase 8: Học viên - Danh sách 64 buổi học kèm trạng thái điểm danh (GET /api/me/lessons)
+export async function listMyLessons(req: Request, res: Response) {
+  const page = parseInt(req.query.page as string) || 1;
+  const pageSize = parseInt(req.query.pageSize as string) || 100;
+  const from = req.query.from ? new Date(req.query.from as string) : undefined;
+  const to = req.query.to ? new Date(req.query.to as string) : undefined;
+  res.json({ data: await service.listMyLessons(req.user!, page, pageSize, from, to) });
+}

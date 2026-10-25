@@ -1,0 +1,29 @@
+$kind: http-request
+name: P8-230 Tạo phòng học hợp lệ
+order: 1000
+method: POST
+url: "{{baseUrl}}/api/rooms"
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+        "branchId": 1,
+        "name": "Phòng {{runTag}}",
+        "capacity": 10,
+        "status": "AVAILABLE"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("P8-230: Tạo phòng trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-230: Lưu roomId vào environment", function () {
+        const body = pm.response.json();
+        const id = (body.data && body.data.id) || body.id;
+        pm.expect(id).to.exist;
+        pm.environment.set("roomId", id);
+      });
+    language: text/javascript

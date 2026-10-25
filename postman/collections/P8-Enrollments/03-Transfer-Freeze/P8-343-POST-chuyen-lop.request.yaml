@@ -1,0 +1,32 @@
+$kind: http-request
+name: P8-343 Chuyển lớp
+order: 1000
+url: "{{baseUrl}}/api/enrollments/{{enrollmentAId}}/transfer"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "newClassId": {{classBId}},
+      "transferDate": "2026-12-01",
+      "reason": "Chuyển sang lớp phù hợp hơn {{runTag}}"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("P8-343: Chuyển lớp trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-343: Enrollment cũ được đánh dấu TRANSFERRED", function () {
+        const body = pm.response.json();
+        const data = body.data || body;
+        if (data.oldEnrollment) {
+          pm.expect(data.oldEnrollment.status).to.equal("TRANSFERRED");
+        } else {
+          console.log("P8-343: Kiểm tra thủ công - GET enrollment cũ và xác nhận status=TRANSFERRED");
+        }
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+    language: text/javascript

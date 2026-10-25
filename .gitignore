@@ -55,3 +55,13 @@ Thumbs.db
 
 # Tệp upload cục bộ (module files lưu mặc định tại đây)
 storage/
+.neon
+
+# Postman local workspace metadata (chứa workspace ID)
+/.postman/
+
+# Temp/debug files
+*.mjs
+check-*.ts
+reset-*.ts
+tmp-*.mjs

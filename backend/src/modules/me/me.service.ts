@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { HttpError } from '../../utils/httpError';
 import { writeAudit } from '../../utils/audit';
@@ -563,3 +563,167 @@ export async function reviewChangeRequest(
     return updated;
   });
 }
+
+// Phase 8: Học viên - Danh sách ghi danh của mình (GET /api/me/enrollments)
+export async function listMyEnrollments(caller: Caller, page = 1, pageSize = 20) {
+  if (!caller.roles.includes('student')) {
+    throw HttpError.forbidden('Chỉ học viên mới truy cập được');
+  }
+  const student = await prisma.student.findFirst({
+    where: { userId: caller.id, deletedAt: null },
+    select: { id: true },
+  });
+  if (!student) throw HttpError.notFound('Không tìm thấy hồ sơ học viên');
+
+  const [items, total] = await prisma.$transaction([
+    prisma.enrollment.findMany({
+      where: { studentId: student.id },
+      select: enrollmentSelect,
+      orderBy: [{ enrolledAt: 'desc' }, { id: 'desc' }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.enrollment.count({ where: { studentId: student.id } }),
+  ]);
+
+  return {
+    items: items.map(toDto),
+    page,
+    pageSize,
+    total,
+    totalPages: Math.ceil(total / pageSize),
+  };
+}
+
+const enrollmentSelect = {
+  id: true,
+  studentId: true,
+  classId: true,
+  enrolledAt: true,
+  startDate: true,
+  expectedEndDate: true,
+  totalSessions: true,
+  tuitionAmount: true,
+  status: true,
+  pauseReason: true,
+  class: { select: { id: true, classCode: true, name: true, courseId: true, course: { select: { id: true, name: true, level: true } } } },
+} satisfies Prisma.EnrollmentSelect;
+
+type EnrollmentRecord = Prisma.EnrollmentGetPayload<{ select: typeof enrollmentSelect }>;
+
+function toDto(enrollment: EnrollmentRecord) {
+  return {
+    ...enrollment,
+    className: enrollment.class?.name ?? null,
+    classCode: enrollment.class?.classCode ?? null,
+    courseName: enrollment.class?.course?.name ?? null,
+    courseLevel: enrollment.class?.course?.level ?? null,
+  };
+}
+
+// Phase 8: Học viên - Danh sách 64 buổi học kèm trạng thái điểm danh (GET /api/me/lessons)
+export async function listMyLessons(caller: Caller, page = 1, pageSize = 100, from?: Date, to?: Date) {
+  if (!caller.roles.includes('student')) {
+    throw HttpError.forbidden('Chỉ học viên mới truy cập được');
+  }
+  const student = await prisma.student.findFirst({
+    where: { userId: caller.id, deletedAt: null },
+    select: { id: true },
+  });
+  if (!student) throw HttpError.notFound('Không tìm thấy hồ sơ học viên');
+
+  // Lấy enrollment ACTIVE
+  const enrollment = await prisma.enrollment.findFirst({
+    where: { studentId: student.id, status: 'ACTIVE' },
+    select: { id: true, classId: true, totalSessions: true },
+  });
+  if (!enrollment) return { items: [], page: 1, pageSize, total: 0, totalPages: 0 };
+
+  const predicates: Prisma.Sql[] = [
+    Prisma.sql`cs.class_id = ${enrollment.classId}`,
+    Prisma.sql`c.deleted_at IS NULL`,
+  ];
+  if (from) predicates.push(Prisma.sql`cs.date >= ${from}`);
+  if (to) predicates.push(Prisma.sql`cs.date <= ${to}`);
+
+  const where = Prisma.join(predicates, ' AND ');
+  const [ids, countRows] = await prisma.$transaction([
+    prisma.$queryRaw<Array<{ id: number }>>(Prisma.sql`SELECT cs.id FROM class_sessions cs
+      JOIN classes c ON c.id = cs.class_id
+      WHERE ${where}
+      ORDER BY cs.date ASC, cs.lesson_no ASC, cs.id ASC
+      LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`),
+    prisma.$queryRaw<Array<{ total: bigint }>>(Prisma.sql`SELECT count(*)::bigint AS total FROM class_sessions cs
+      JOIN classes c ON c.id = cs.class_id WHERE ${where}`),
+  ]);
+
+  const sessions = ids.length
+    ? await prisma.classSession.findMany({
+        where: { id: { in: ids.map(({ id }) => id) } },
+        select: sessionSelect,
+        orderBy: [{ date: 'asc' }, { lessonNo: 'asc' }, { id: 'asc' }],
+      })
+    : [];
+
+  type SessionRecord = typeof sessions[0];
+  const byId = new Map(sessions.map((s) => [s.id, s]));
+  const rows = ids.map(({ id }) => byId.get(id)).filter((s): s is SessionRecord => !!s);
+
+  // Lấy điểm danh của học viên này cho các buổi
+  const sessionIds = rows.map((s) => s.id);
+  const attendanceMap = new Map<number, { status: string | null; note: string | null; markedAt: Date | null }>();
+  if (sessionIds.length > 0) {
+    const marks = await prisma.attendance.findMany({
+      where: { classSessionId: { in: sessionIds }, studentId: student.id },
+      select: { classSessionId: true, status: true, note: true, markedAt: true },
+    });
+    for (const m of marks) {
+      attendanceMap.set(m.classSessionId, { status: m.status, note: m.note, markedAt: m.markedAt });
+    }
+  }
+
+  const total = Number(countRows[0]?.total ?? 0n);
+
+  return {
+    items: rows.map((row) => {
+      const attendance = attendanceMap.get(row.id);
+      return {
+        sessionId: row.id,
+        lessonNo: row.lessonNo,
+        date: row.date,
+        startTime: row.startTime,
+        endTime: row.endTime,
+        topic: row.topic,
+        unit: row.unit,
+        status: row.status,
+        lockedAt: row.lockedAt,
+        attendanceStatus: attendance?.status ?? null,
+        attendanceNote: attendance?.note ?? null,
+        attendanceMarkedAt: attendance?.markedAt ?? null,
+      };
+    }),
+    page,
+    pageSize,
+    total,
+    totalPages: Math.ceil(total / pageSize),
+  };
+}
+
+const sessionSelect = {
+  id: true,
+  classId: true,
+  lessonNo: true,
+  date: true,
+  startTime: true,
+  endTime: true,
+  roomId: true,
+  teacherId: true,
+  topic: true,
+  unit: true,
+  note: true,
+  status: true,
+  cancelReason: true,
+  lockedAt: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.ClassSessionSelect;

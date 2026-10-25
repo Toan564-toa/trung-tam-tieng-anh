@@ -1,0 +1,34 @@
+$kind: http-request
+name: P8-021 Tạo lớp bằng staff (expect 403)
+order: 2000
+url: "{{baseUrl}}/api/classes"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "courseId": {{courseId}},
+      "classCode": "{{runTag}}-STAFF-TEST",
+      "name": "{{runTag}} Staff Test",
+      "teacherId": {{teacherAId}},
+      "roomId": {{roomId}},
+      "startDate": "2026-11-02",
+      "expectedEndDate": "2027-07-02",
+      "maxStudents": 5,
+      "status": "PLANNED",
+      "schedules": [
+        { "weekday": 1, "timeSlotId": 3, "roomId": 7 },
+        { "weekday": 3, "timeSlotId": 3, "roomId": 7 }
+      ]
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("P8-021: Staff tạo lớp trả 403 (route chỉ cho admin)", function () {
+        // Đăng nhập bằng staff trước khi chạy request này
+        // Nếu API docs cho phép staff tạo lớp thì sửa kỳ vọng thành 2xx
+        pm.expect(pm.response.code).to.equal(403);
+      });
+    language: text/javascript

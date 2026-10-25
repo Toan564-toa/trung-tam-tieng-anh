@@ -1,0 +1,27 @@
+$kind: http-request
+name: 'P8-345 Kết thúc bảo lưu'
+order: 3000
+url: '{{baseUrl}}/api/enrollments/{{enrollmentAId}}/unfreeze'
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "toDate": "2027-01-15",
+      "reason": "Học viên quay lại sớm {{runTag}}"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-345: Kết thúc bảo lưu trả 2xx", function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      });
+      pm.test("P8-345: Freeze record được đóng đúng", function () {
+        const body = pm.response.json();
+        const data = body.data || body;
+        pm.expect(data).to.exist;
+      });

@@ -1,0 +1,23 @@
+$kind: http-request
+name: 'P8-002c: POST /api/auth/login (portal sai vai trò)'
+order: 3000
+method: POST
+url: '{{baseUrl}}/api/auth/login'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "username": "{{staffUsername}}",
+      "password": "{{staffPassword}}",
+      "portal": "admin"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-002c: Login portal sai vai trò trả 403", function () {
+        pm.expect(pm.response.code).to.equal(403);
+      });

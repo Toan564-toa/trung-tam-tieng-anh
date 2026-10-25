@@ -1,0 +1,30 @@
+$kind: http-request
+name: 'P8-027 Kiểm tra trùng lịch (conflicts)'
+order: 3000
+url: '{{baseUrl}}/api/classes/conflicts'
+method: GET
+queryParams:
+  - key: weekday
+    value: '1'
+  - key: startTime
+    value: '10:00'
+  - key: endTime
+    value: '11:30'
+  - key: roomId
+    value: '6'
+  - key: teacherId
+    value: '{{teacherAId}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("P8-027: GET /conflicts trả 200", function () {
+        pm.expect(pm.response.code).toBe(200);
+      });
+      pm.test("P8-027: Response có items array", function () {
+        const body = pm.response.json();
+        pm.expect(body.data).toHaveProperty('items');
+        pm.expect(body.data.items).toBeArray();
+      });
+      // Test với khung giờ có conflict (B1T02 - Thứ 3, 19:45-21:15, room 3, teacher 2)
+      // Chạy request riêng để verify conflict detection
